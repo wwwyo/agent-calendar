@@ -41,6 +41,8 @@ const EnvSchema = z.object({
   // デモ用フォームと承認の上限（1時間あたり）。1人が締切・定期の仕事を足し、提案を承認し、消すまでを2回通せる数
   DEMO_LIMIT_PER_IP: z.coerce.number().default(10),
   DEMO_LIMIT_GLOBAL: z.coerce.number().default(40),
+  // 公開の GET（画面と JSON）の IP ごと・1分あたりの上限。instance のメモリで数える
+  READ_LIMIT_PER_IP_PER_MIN: z.coerce.number().default(240),
   // agent の実行の上限（組ごと・1時間あたり）。超えた発火は実行せず記録だけ残す
   RUN_LIMIT_PER_HOUR: z.coerce.number().default(60),
   // デモ用フォームで足した予定を消すまでの時間

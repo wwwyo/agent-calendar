@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import type { Workspace } from "../config";
+import { scriptJson } from "../http";
 import { DEMO_NOTES_MAX, DEMO_PROMPT_MAX, TITLE_MAX } from "./demo";
 
 export const esc = (s: unknown) =>
@@ -113,7 +114,7 @@ function shell(ws: Workspace, title: string, slab: string, content: string, scri
 <style>${DESIGN}${PAGE}</style></head><body><div class="page-guides"></div><main>
 <header class="slab">${slab}</header>
 <div class="content">${content}</div></main>
-<script>const WS=${JSON.stringify(ws.id)};const TZ=${JSON.stringify(ws.timeZone)};${CLIENT}${script}</script></body></html>`;
+<script>const WS=${scriptJson(ws.id)};const TZ=${scriptJson(ws.timeZone)};${CLIENT}${script}</script></body></html>`;
 }
 
 function addDialog(ws: Workspace): string {
@@ -273,7 +274,7 @@ export function renderSessionPage(ws: Workspace, id: string, flash?: string): st
 <div class="frame tick"><section><h2 class="text-heading">実行ログ</h2><div id="log"></div></section></div>
 <div class="frame tick" id="approvals-frame" hidden><section><h2 class="text-heading">提案</h2><div id="approvals"></div></section></div>`;
   const script = `
-const ID=${JSON.stringify(id)};
+const ID=${scriptJson(id)};
 const block=(s)=>'<pre class="code">'+esc(s)+'</pre>';
 poll(async()=>{
   const r=await fetch("/w/"+WS+"/api/sessions/"+encodeURIComponent(ID));

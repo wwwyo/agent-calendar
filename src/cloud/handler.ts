@@ -1,6 +1,7 @@
 import type { AuthClient } from "google-auth-library";
 import { bearer } from "../auth";
 import { OUTPUT_MAX, SANDBOX_PATHS, SandboxResultSchema, type RunAccess } from "../dispatch/types";
+import { readLimited, TooLarge } from "../http";
 import { log } from "../log";
 import { hashSandboxToken, type SandboxTokens, type TokenCheck } from "./tokens";
 
@@ -83,28 +84,6 @@ export function sanitizeLlmRequest(body: unknown): Record<string, unknown> {
   return out;
 }
 
-// Content-Length を信じず、上限を超えたところで読むのをやめる
-async function readLimited(req: Request, max: number): Promise<string> {
-  const declared = Number(req.headers.get("content-length"));
-  if (declared > max) throw new TooLarge();
-  if (!req.body) return "";
-  const reader = req.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > max) {
-      await reader.cancel();
-      throw new TooLarge();
-    }
-    chunks.push(value);
-  }
-  return new TextDecoder().decode(Buffer.concat(chunks));
-}
-
-class TooLarge extends Error {}
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 

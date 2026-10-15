@@ -29,7 +29,7 @@ export function isAllowedCreator(e: CalendarEvent, ws: Workspace): boolean {
   return [e.creatorEmail, e.organizerEmail].some((x) => x && allowed.has(x.toLowerCase()));
 }
 
-function exceptionsByMaster(events: CalendarEvent[], tz: string): Map<string, Set<number>> {
+export function exceptionsByMaster(events: CalendarEvent[], tz: string): Map<string, Set<number>> {
   const out = new Map<string, Set<number>>();
   for (const e of events) {
     if (!e.recurringEventId || !e.originalStartTime) continue;

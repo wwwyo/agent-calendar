@@ -3,12 +3,12 @@ import { OAuth2Client } from "google-auth-library";
 import { createAuthClient } from "./auth";
 import { ServiceAccountCalendar } from "./calendar/service-account";
 import { loadConfig, type Workspace } from "./config";
-import { toWall } from "./domain/time";
 import { log } from "./log";
 import { DEMO_EXPIRES_TAG, tick, type Deps } from "./runner";
 import { FirestoreStore } from "./store/firestore";
 import { MemoryStore } from "./store/memory";
 import type { Store } from "./store/store";
+import { calendarItems, weekRange } from "./web/calendar";
 import { renderSessionPage, renderSessionsPage } from "./web/dashboard";
 import { AutomationForm, automationEvent, DeadlineForm, deadlineEvent } from "./web/demo";
 
@@ -75,34 +75,37 @@ async function write<T>(ws: Workspace, f: () => Promise<T>): Promise<T> {
 
 const LIMITED = "1時間あたりの回数の上限に達した。しばらくしてから試してください。";
 
-const today = (ws: Workspace) => new Date(toWall(Date.now(), ws.timeZone)).toISOString().slice(0, 10);
 const html = (body: string) => new Response(body, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
 
-// 一覧は全員が数秒ごとに読むので、Firestore の読み取りを instance ごとに数秒まとめる
-const SESSIONS_CACHE_MS = 2500;
-const sessionsCache = new Map<string, { at: number; body: unknown }>();
+// 一覧とカレンダーは全員が数秒ごとに読むので、Firestore の読み取りを instance ごとに数秒まとめる
+const SNAPSHOT_CACHE_MS = 2500;
+const snapshots = new Map<string, { at: number; body: Promise<Snapshot> }>();
+type Snapshot = Awaited<ReturnType<typeof readSnapshot>>;
 
-async function sessionsJson(ws: Workspace) {
-  const hit = sessionsCache.get(ws.id);
-  if (hit && Date.now() - hit.at < SESSIONS_CACHE_MS) return hit.body;
-  const [schedule, runs, approvals, automation, records] = await Promise.all([
-    store.getSchedule(ws.id),
+async function readSnapshot(ws: Workspace) {
+  const [runs, approvals, automation, records] = await Promise.all([
     store.listRuns(ws.id, 30),
     store.listApprovals(ws.id, 50),
     store.listEvents(ws.id, "automation"),
     store.listEvents(ws.id, "records"),
   ]);
+  return { runs, approvals, automation, records };
+}
+
+function snapshot(ws: Workspace): Promise<Snapshot> {
+  const hit = snapshots.get(ws.id);
+  if (hit && Date.now() - hit.at < SNAPSHOT_CACHE_MS) return hit.body;
+  const body = readSnapshot(ws);
+  snapshots.set(ws.id, { at: Date.now(), body });
+  body.catch(() => snapshots.delete(ws.id));
+  return body;
+}
+
+async function sessionsJson(ws: Workspace) {
+  const { runs, approvals } = await snapshot(ws);
   const pending = new Map<string, number>();
   for (const a of approvals) if (a.status === "pending") pending.set(a.runId, (pending.get(a.runId) ?? 0) + 1);
-  const body = {
-    next: (schedule?.items ?? []).slice(0, 3).map((i) => ({ fireAt: i.fireAt, title: i.title, blocked: i.blocked })),
-    // デモ用フォームで足した予定（dashboard から消せる）
-    demoEvents: [
-      ...automation.map((e) => ({ role: "automation" as const, e })),
-      ...records.map((e) => ({ role: "records" as const, e })),
-    ]
-      .filter(({ e }) => e.tags[DEMO_EXPIRES_TAG] && e.status !== "cancelled" && !e.recurringEventId)
-      .map(({ role, e }) => ({ role, id: e.id, title: e.summary, expiresAt: e.tags[DEMO_EXPIRES_TAG] })),
+  return {
     sessions: runs.map((r) => ({
       id: r.id,
       title: r.title,
@@ -115,8 +118,6 @@ async function sessionsJson(ws: Workspace) {
       pendingApprovals: pending.get(r.id) ?? 0,
     })),
   };
-  sessionsCache.set(ws.id, { at: Date.now(), body });
-  return body;
 }
 
 async function formOf(req: Request): Promise<Record<string, string>> {
@@ -145,7 +146,7 @@ const server = Bun.serve({
     "/w/:ws": (req) => {
       const ws = publicWorkspace(req.params.ws);
       if (!ws) return new Response("not found", { status: 404 });
-      return html(renderSessionsPage(ws, today(ws), new URL(req.url).searchParams.get("flash") ?? undefined));
+      return html(renderSessionsPage(ws, new URL(req.url).searchParams.get("flash") ?? undefined));
     },
     "/w/:ws/sessions/:id": (req) => {
       const ws = publicWorkspace(req.params.ws);
@@ -156,6 +157,16 @@ const server = Bun.serve({
       const ws = publicWorkspace(req.params.ws);
       if (!ws) return new Response("not found", { status: 404 });
       return Response.json(await sessionsJson(ws), { headers: { "Cache-Control": "no-store" } });
+    },
+    "/w/:ws/api/calendar": async (req) => {
+      const ws = publicWorkspace(req.params.ws);
+      if (!ws) return new Response("not found", { status: 404 });
+      const now = Date.now();
+      const range = weekRange(new URL(req.url).searchParams.get("start"), ws, now);
+      if (!range) return new Response("bad request", { status: 400 });
+      const { automation, records, runs } = await snapshot(ws);
+      const items = calendarItems({ ws, automation, records, runs, from: range.from, to: range.to, now });
+      return Response.json({ start: range.start, items }, { headers: { "Cache-Control": "no-store" } });
     },
     "/w/:ws/api/sessions/:id": async (req) => {
       const ws = publicWorkspace(req.params.ws);
@@ -170,8 +181,10 @@ const server = Bun.serve({
         if (!ws) return new Response("not found", { status: 404 });
         const f = AutomationForm.safeParse(await formOf(req));
         if (!f.success) return back(ws, `入力が不正: ${f.error.issues.map((i) => `${i.path.join(".")} ${i.message}`).join("; ")}`);
+        const ev = automationEvent(f.data, ws, Date.now(), cfg.DEMO_EVENT_TTL_HOURS);
+        if (typeof ev === "string") return back(ws, ev);
         if (!(await allowWrite(req, srv, ws))) return back(ws, LIMITED);
-        const e = await write(ws, () => calendar.insertEvent(ws.calendars.automation, automationEvent(f.data, ws, Date.now(), cfg.DEMO_EVENT_TTL_HOURS)));
+        const e = await write(ws, () => calendar.insertEvent(ws.calendars.automation, ev));
         log("info", "demo event created", { workspace: ws.id, role: "automation", eventId: e.id });
         return back(ws, `「${f.data.title}」を追加した。`);
       },

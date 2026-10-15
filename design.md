@@ -1,0 +1,249 @@
+# Design — agent-calendar
+
+Locked design system。この repo の視覚値の正本。product-design skill はこれを参照し、
+Hallmark は検出すると pick をこれに従わせる。値を変えるときはこのファイルだけを編集し、
+派生物は再生成する。
+
+## System
+- Genre · modern-minimal（engineering worksheet）
+- Theme · 夜の方眼紙に紫 `#a855f7` 一色。罫線と点で「計測している」画面を作り、彩度のある面は header の slab 1枚だけ
+- Vibe · measured, hairline, quiet, one-hue, machine-honest
+
+## Tokens
+
+dark 単一テーマ。light は未制定（下の Notes）。
+
+```css
+:root {
+  color-scheme: dark;
+
+  /* surfaces — shadcn 語彙 */
+  --background: #0f0b16;
+  --foreground: #f0eaf7;
+  --card: #0f0b16;
+  --card-foreground: #f0eaf7;
+  --popover: #16101f;
+  --popover-foreground: #f0eaf7;
+  --secondary: #16101f;            /* inset・chip・tab strip の面 */
+  --secondary-foreground: #f0eaf7;
+  --muted: #16101f;
+  --muted-foreground: #9e93ac;     /* label・caption・補足 */
+  --accent: #1c1428;               /* hover / selected の控えめな面 */
+  --accent-foreground: #f0eaf7;
+
+  /* brand — 彩度のある色はこの系統だけ */
+  --primary: #a855f7;
+  --primary-foreground: #12061c;
+  --primary-hover: #bf7dff;
+  --primary-deep: #d9b3ff;         /* 紫の tint 上の文字 */
+  --glow-1: #d8a8ff;               /* slab の sunrise 外輪 */
+  --glow-2: #f6e9ff;               /* slab の sunrise 中心 */
+
+  /* state */
+  --destructive: #ff5f7a;
+  --destructive-foreground: #12061c;
+  --success: #4de0a8;
+  --success-foreground: #12061c;
+  --warning: #d9b3ff;              /* 実行中・遅れて登録。新しい色相を足さず primary-deep を流用 */
+  --warning-foreground: #12061c;
+  --faint: #635a70;                /* hash・run id など読まなくてよい機械出力のみ */
+
+  /* lines */
+  --border: #2a2137;               /* すべての hairline */
+  --border-strong: #3c3050;        /* outline pill・corner tick・dashed guide */
+  --input: #3c3050;
+  --ring: #a855f7;
+  --dot: #241c30;                  /* gutter の点 */
+
+  /* type — 和欧混植。欧文は Inter Tight、和文は OS の角ゴ */
+  --font-sans: "Inter Tight", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 15px;
+  --text-md: 16px;
+  --text-lg: 19px;
+  --text-xl: 28px;
+  --text-2xl: 34px;
+  --line-height-body: 1.7;
+  --line-height-heading: 1.3;
+  --letter-spacing-body: 0.02em;
+  --letter-spacing-heading: 0;
+
+  /* space — 4px base */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 56px;
+  --space-8: 96px;
+  --max-width: 1200px;
+
+  /* shape */
+  --radius: 6px;
+  --radius-sm: 4px;
+  --radius-panel: 16px;
+  --radius-pill: 999px;
+
+  /* texture */
+  --dot-grid: 12px;
+  --rule-dash: 16px;
+  --glare: 62;
+  --shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+
+  /* motion */
+  --ease: cubic-bezier(0.19, 1, 0.22, 1);
+  --duration: 200ms;
+}
+```
+
+## Components
+
+```css
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.text-body {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--line-height-body);
+  letter-spacing: var(--letter-spacing-body);
+  line-break: strict;
+  overflow-wrap: break-word;
+}
+/* 見出しは 500。600/700 にしない。palt で和文を詰め、欧文だけ -0.025em に締める */
+.text-heading {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  line-height: var(--line-height-heading);
+  letter-spacing: var(--letter-spacing-heading);
+  font-feature-settings: "palt";
+  word-break: keep-all;
+}
+/* mono は機械の出力専用: payload・tool 引数と結果・run id・tokens・時刻の生値 */
+.mono { font-family: var(--font-mono); font-size: var(--text-sm); letter-spacing: 0; }
+
+/* 背景の足場: gutter の点と、本文カラム端の dashed guide。z-index:-1 で内容の後ろ */
+.page-guides {
+  position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: radial-gradient(circle, var(--dot) 0.9px, transparent 0.9px) 0 0 / var(--dot-grid) var(--dot-grid);
+  mask: linear-gradient(90deg, #000 calc(50% - var(--max-width) / 2), transparent 0 calc(50% + var(--max-width) / 2), #000 0);
+}
+
+/* header の slab。dashboard では1枚だけ・高さは内容なり（viewport を占有しない） */
+.slab {
+  position: relative; overflow: hidden; display: grid; gap: var(--space-4);
+  padding: var(--space-7) var(--space-5);
+  border-radius: var(--radius-panel);
+  background: var(--primary); color: var(--primary-foreground);
+  box-shadow: var(--shadow), inset 1px 6px 6px rgba(255, 255, 255, 0.2);
+}
+.slab::before {
+  content: ""; position: absolute; inset: 0;
+  background:
+    radial-gradient(60% 90% at 50% 50%, color-mix(in srgb, var(--primary-hover) 60%, transparent), transparent 70%),
+    radial-gradient(circle, rgba(255, 255, 255, 0.24) 1px, transparent 1px) 0 0 / calc(var(--dot-grid) * 0.75) calc(var(--dot-grid) * 0.75);
+}
+.slab::after {
+  content: ""; position: absolute; inset: auto 0 0; height: calc(var(--glare) * 0.62%); filter: blur(4px);
+  background:
+    radial-gradient(22% 100% at 50% 100%, var(--glow-2), transparent 66%),
+    radial-gradient(50% 100% at 50% 100%, var(--glow-1), transparent 74%);
+}
+.slab > * { position: relative; z-index: 1; }
+
+/* section は hairline の枠を 1px rule で区切った cell の集まり。角丸・影・隙間なし */
+.frame { display: grid; gap: 1px; border: 1px solid var(--border); background: var(--border); }
+.frame > * { padding: var(--space-6); background: var(--card); }
+/* 枠の四隅の中空 tick（9px border-strong の上に 7px background） */
+.tick { position: relative; }
+.tick::before {
+  content: ""; position: absolute; z-index: 2; inset: -5px; pointer-events: none;
+  background:
+    linear-gradient(var(--background) 0 0) 1px 1px,
+    linear-gradient(var(--background) 0 0) calc(100% - 1px) 1px,
+    linear-gradient(var(--background) 0 0) 1px calc(100% - 1px),
+    linear-gradient(var(--background) 0 0) calc(100% - 1px) calc(100% - 1px),
+    linear-gradient(var(--border-strong) 0 0) 0 0,
+    linear-gradient(var(--border-strong) 0 0) 100% 0,
+    linear-gradient(var(--border-strong) 0 0) 0 100%,
+    linear-gradient(var(--border-strong) 0 0) 100% 100%;
+  background-repeat: no-repeat;
+  background-size: 7px 7px, 7px 7px, 7px 7px, 7px 7px, 9px 9px, 9px 9px, 9px 9px, 9px 9px;
+}
+
+.table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+.table th { color: var(--muted-foreground); font-weight: 500; font-size: var(--text-xs); text-align: left; }
+.table td, .table th { padding: var(--space-2) var(--space-1); border-bottom: 1px solid var(--border); vertical-align: top; }
+
+/* button は pill。primary は承認など1画面に1種類の主操作だけ */
+.btn {
+  height: 40px; padding: 0 var(--space-5); border: 1px solid transparent; border-radius: var(--radius-pill);
+  font: 500 var(--text-base) var(--font-sans); cursor: pointer;
+}
+.btn-primary { background: var(--primary); color: var(--primary-foreground); }
+.btn-primary:hover { background: var(--primary-hover); }
+.btn-outline { background: var(--background); color: var(--foreground); border-color: var(--border-strong); }
+.btn-outline:hover { background: var(--accent); }
+.slab .btn-primary { background: var(--foreground); color: var(--primary-foreground); }
+
+.chip {
+  display: inline-block; padding: 0 var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--secondary); color: var(--secondary-foreground); font-size: var(--text-xs); white-space: nowrap;
+}
+.status-ok { color: var(--success); }
+.status-bad { color: var(--destructive); }
+.status-warn { color: var(--warning); }
+.text-muted { color: var(--muted-foreground); }
+
+.input {
+  width: 100%; padding: var(--space-2) var(--space-3); border: 1px solid var(--input); border-radius: var(--radius-sm);
+  background: var(--secondary); color: var(--foreground); font: inherit;
+}
+.input:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+
+/* 機械の出力ブロック。terminal card */
+.code {
+  margin: var(--space-2) 0; padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--secondary); color: var(--foreground);
+  font-family: var(--font-mono); font-size: var(--text-sm); white-space: pre-wrap; word-break: break-word;
+}
+
+.dashed-rule { height: 1px; background: linear-gradient(90deg, var(--border-strong) 50%, transparent 0) 0 0 / calc(var(--rule-dash) * 2) 1px repeat-x; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .btn, .chip, a, .input { transition: color var(--duration) var(--ease), background-color var(--duration) var(--ease), border-color var(--duration) var(--ease); }
+}
+```
+
+## Icons
+- lucide（inline SVG）・24px grid を 16px / 20px で表示・stroke 1.5・`currentColor`。他 library と混ぜない。例外は Google Calendar など外部サービスの公式 logo のみ
+- 現状の dashboard は icon を使っていない。足すときに上記へ揃える
+
+## Logo
+- Logomark: なし（`src/web/dashboard.ts` の header はテキストのみ。2026-10-15 確認）。flavor 出所の half-sun mark は他ブランドの意匠なので流用しない
+- Wordmark: 未制定。暫定は `agent-calendar` を `.text-heading` の 500・小文字・tracking 0 で組む
+- Usage: 未制定
+- Assets: なし
+
+## Motion
+- 色・背景・border だけを 200ms expo-out（`--ease`）で変える。位置・scale・影・読む対象の opacity は動かさない。hover で浮かせない、scroll で出現させない
+- すべて `prefers-reduced-motion: no-preference` の中。reduce では遷移なしで即時に切り替わる
+
+## Exports
+- `src/web/design.css` は本ファイルの css block（Tokens → Components の順）をそのまま連結した派生物。直接編集禁止。`## Tokens` / `## Components` を変えた編集は同じ編集で `design.css` も再生成する。ずれると `src/web/design.test.ts` が落ちる
+- `src/web/dashboard.ts` は `design.css` を読み、その後ろにページ固有の配置（grid の列・余白）だけを足す。色・font・radius をそこに直書きしない
+- font は Google Fonts から読む: `https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500&family=Geist+Mono:wght@400;500&display=swap`。和文は OS font に落ちるので Noto Sans JP は読まない
+
+## Notes
+- 出所: flavors.design の「Cloudglare」flavor（https://flavors.design/f/cloudglare）に、viewer が Tweaks で dark purple scheme を当てたもの。2026-10-15 に貼り付けで受領
+- 流用したもの: palette（Tweaks 後の値）、hairline frame + 中空 corner tick、gutter の dot field と dashed guide、彩度は一色だけ・gradient は slab だけ、見出し 500、mono は機械の出力専用、pill button、200ms expo-out
+- 捨てたもの: globe・pricing・customer browser・comparison・marquee・nav の collapse・tilted tile。marketing landing 用の部品で、この dashboard（発火予定・承認待ち・実行記録）に対応する画面がない。hero slab の「≥760px でほぼ空」も、毎日確かめる画面の first view を潰すので header 高さに縮めた
+- 和文向けに変えたもの: 本文の tracking は flavor の -0.01em ではなく +0.02em、line-height は 1.5 → 1.7。見出しの -0.025em は和文が潰れるので 0 にし `palt` で詰める
+- light テーマは未制定。Tweaks は light の白地＋orange を dark＋purple に置き換えたもので、light の purple は与えられていない。必要になったら `.light` に同じ token を設計する
+- 状態色の黄（warning）は flavor にない。「彩度は一色」を守るため warning は `--primary-deep` を流用した。失敗（destructive）と成功（success）は flavor の danger / ok

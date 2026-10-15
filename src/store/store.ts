@@ -1,5 +1,6 @@
 import type { CalendarEvent, EventTime } from "../calendar/adapter";
 import type { FireItem } from "../domain/schedule";
+import type { RunDispatchFields } from "../dispatch/types";
 
 export type CalendarRole = "automation" | "records" | "main";
 
@@ -14,7 +15,7 @@ export type Schedule = {
 
 export type ToolCallRecord = { name: string; args: unknown; result: unknown };
 
-export type Run = {
+export type Run = RunDispatchFields & {
   id: string;
   fireKey: string;
   kind: FireItem["kind"];
@@ -23,8 +24,8 @@ export type Run = {
   scheduledAt: string;
   startedAt: string;
   finishedAt?: string;
-  // running のまま残ったものは、実行中に process が落ちた
-  status: "running" | "succeeded" | "failed" | "skipped";
+  // queued: local worker が受け取るのを待っている。running のまま deadlineAt（無ければ10分）を過ぎたものは、実行中に落ちた
+  status: "queued" | "running" | "succeeded" | "failed" | "skipped";
   // skipped・failed の理由
   reason?: string;
   late?: boolean;

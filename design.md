@@ -8,6 +8,7 @@ Hallmark は検出すると pick をこれに従わせる。値を変えると�
 - Genre · modern-minimal（engineering worksheet）
 - Theme · 夜の方眼紙に紫 `#a855f7` 一色。罫線と点で「計測している」画面を作り、彩度のある面は header の slab 1枚だけ
 - Vibe · measured, hairline, quiet, one-hue, machine-honest
+- 使い分け・禁止事項・文言の規約は `.agents/skills/product-design/`。この file は値と基盤 class だけを持つ
 
 ## Tokens
 
@@ -46,7 +47,7 @@ dark 単一テーマ。light は未制定（下の Notes）。
   --success-foreground: #12061c;
   --warning: #d9b3ff;              /* 実行中・遅れて登録。新しい色相を足さず primary-deep を流用 */
   --warning-foreground: #12061c;
-  --faint: #635a70;                /* hash・run id など読まなくてよい機械出力のみ */
+  --faint: #635a70;                /* hash など読まなくてよい値だけ。点検で読む値（run id・tokens）には使わない */
 
   /* lines */
   --border: #2a2137;               /* すべての hairline */

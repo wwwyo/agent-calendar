@@ -30,7 +30,7 @@
   --success-foreground: #12061c;
   --warning: #d9b3ff;              /* 実行中・遅れて登録。新しい色相を足さず primary-deep を流用 */
   --warning-foreground: #12061c;
-  --faint: #635a70;                /* hash・run id など読まなくてよい機械出力のみ */
+  --faint: #635a70;                /* hash など読まなくてよい値だけ。点検で読む値（run id・tokens）には使わない */
 
   /* lines */
   --border: #2a2137;               /* すべての hairline */

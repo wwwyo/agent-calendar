@@ -1,93 +1,115 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" font-family="Hiragino Sans, Noto Sans JP, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1600" height="900" viewBox="0 0 1600 900" font-family="Google Sans, Roboto, Hiragino Sans, Noto Sans JP, sans-serif">
   <defs>
-    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#4a4a46"/></marker>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#5f6368"/></marker>
+    <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#EA4335"/></marker>
+    <filter id="sh" x="-5%" y="-5%" width="110%" height="120%"><feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#3c4043" flood-opacity="0.18"/></filter>
     <style>
-      .box{fill:#fff;stroke:#c9c6bb;stroke-width:2;rx:16}
-      .gcp{fill:#eef5f2;stroke:#1f6f5c;stroke-width:2;stroke-dasharray:8 6}
-      .t{font-size:26px;font-weight:700;fill:#1d1d1b}
-      .s{font-size:19px;fill:#55544e}
-      .l{font-size:18px;fill:#1f6f5c;font-weight:600}
-      .e{stroke:#4a4a46;stroke-width:2.5;fill:none;marker-end:url(#a)}
-      .d{stroke:#a5521b;stroke-width:2.5;fill:none;marker-end:url(#a);stroke-dasharray:7 5}
+      .card{fill:#fff;filter:url(#sh)}
+      .t{font-size:22px;font-weight:600;fill:#202124}
+      .s{font-size:16px;fill:#5f6368}
+      .e{stroke:#5f6368;stroke-width:2;fill:none;marker-end:url(#a)}
+      .d{stroke:#EA4335;stroke-width:2;fill:none;marker-end:url(#b);stroke-dasharray:6 5}
+      .lb{font-size:15px;fill:#5f6368}
     </style>
   </defs>
-  <rect width="1600" height="900" fill="#f7f6f2"/>
-  <text x="60" y="70" font-size="36" font-weight="700" fill="#1d1d1b">agent-calendar — 構成図</text>
-  <text x="60" y="108" class="s">予定と締切を Google Calendar に書くと、agent が準備と定期の仕事を自分で始める</text>
+  <rect width="1600" height="900" fill="#f8f9fa"/>
+  <rect x="0" y="0" width="1600" height="6" fill="#4285F4"/><rect x="400" y="0" width="400" height="6" fill="#EA4335"/><rect x="800" y="0" width="400" height="6" fill="#FBBC04"/><rect x="1200" y="0" width="400" height="6" fill="#34A853"/>
+  <text x="60" y="68" font-size="34" font-weight="600" fill="#202124">Agent Calendar — アーキテクチャ</text>
+  <text x="60" y="102" class="s">予定と締切を Google Calendar に書くと、agent が準備と定期の仕事を自分で始める</text>
 
-  <!-- People -->
-  <rect x="60" y="170" width="300" height="150" class="box" rx="16"/>
-  <text x="85" y="215" class="t">人（本人・審査員）</text>
-  <text x="85" y="250" class="s">カレンダーに予定を書く</text>
-  <text x="85" y="278" class="s">dashboard で記録を見て</text>
-  <text x="85" y="306" class="s">提案を承認する</text>
+  <!-- 人 -->
+  <rect x="60" y="150" width="300" height="130" rx="12" class="card"/>
+  <text x="84" y="192" class="t">人（本人・審査員）</text>
+  <text x="84" y="224" class="s">カレンダーに予定を書く</text>
+  <text x="84" y="250" class="s">dashboard で記録を見て承認する</text>
 
-  <!-- Calendars -->
-  <rect x="60" y="400" width="300" height="400" class="box" rx="16"/>
-  <text x="85" y="445" class="t">Google Calendar</text>
-  <rect x="85" y="470" width="250" height="130" fill="#f6eefa" stroke="#cd74e6" stroke-width="2" rx="12"/>
-  <text x="105" y="505" font-size="21" font-weight="700" fill="#1d1d1b">起動用 Automation</text>
-  <text x="105" y="537" class="s">繰り返し予定 + notes の</text>
-  <text x="105" y="565" class="s">payload（prompt）= 命令</text>
-  <rect x="85" y="620" width="250" height="150" fill="#f3f1f1" stroke="#a89a9c" stroke-width="2" rx="12"/>
-  <text x="105" y="655" font-size="21" font-weight="700" fill="#1d1d1b">記録用 Agent Cal</text>
-  <text x="105" y="687" class="s">締切 +「準備: 30日前」</text>
-  <text x="105" y="715" class="s">= 事実。notes は</text>
-  <text x="105" y="743" class="s">信頼しないデータ</text>
+  <!-- Calendar -->
+  <rect x="60" y="340" width="300" height="440" rx="12" class="card"/>
+  <image href="icons/google_calendar.svg" x="84" y="362" width="36" height="36"/>
+  <text x="132" y="388" class="t">Google Calendar</text>
+  <rect x="84" y="420" width="252" height="150" rx="10" fill="#e8f0fe"/>
+  <rect x="84" y="420" width="6" height="150" fill="#4285F4"/>
+  <text x="104" y="456" font-size="19" font-weight="600" fill="#202124">起動用カレンダー</text>
+  <text x="104" y="486" class="s">頼みたい仕事を</text>
+  <text x="104" y="510" class="s">自然言語で書く</text>
+  <text x="104" y="540" class="s" fill="#1a73e8">= 命令（作成者 allowlist）</text>
+  <rect x="84" y="595" width="252" height="160" rx="10" fill="#f1f3f4"/>
+  <rect x="84" y="595" width="6" height="160" fill="#9aa0a6"/>
+  <text x="104" y="631" font-size="19" font-weight="600" fill="#202124">記録用カレンダー</text>
+  <text x="104" y="661" class="s">締切 +「準備: 30日前」</text>
+  <text x="104" y="687" class="s">= 事実。notes は</text>
+  <text x="104" y="713" class="s">信頼しないデータ</text>
 
-  <!-- GCP -->
-  <rect x="460" y="150" width="1080" height="690" class="gcp" rx="24"/>
-  <text x="490" y="192" class="l">Google Cloud（agent-calendar-wwwyo / asia-northeast1）</text>
+  <!-- GCP frame -->
+  <rect x="440" y="140" width="1110" height="700" rx="16" fill="#ffffff" stroke="#dadce0" stroke-width="1.5"/>
+  <rect x="440" y="140" width="1110" height="44" rx="16" fill="#f1f3f4"/>
+  <rect x="440" y="168" width="1110" height="16" fill="#f1f3f4"/>
+  <text x="466" y="169" font-size="17" font-weight="600" fill="#3c4043">Google Cloud</text>
 
-  <rect x="500" y="230" width="300" height="130" class="box" rx="16"/>
-  <text x="525" y="275" class="t">Cloud Scheduler</text>
-  <text x="525" y="310" class="s">1分ごとに POST /tick</text>
-  <text x="525" y="338" class="s">（OIDC token）</text>
+  <!-- Scheduler -->
+  <rect x="470" y="215" width="290" height="120" rx="12" class="card"/>
+  <image href="icons/cloud_scheduler.svg" x="490" y="235" width="40" height="40"/>
+  <text x="542" y="262" class="t">Cloud Scheduler</text>
+  <text x="490" y="300" class="s">1分ごとに /tick（OIDC）</text>
 
-  <rect x="900" y="230" width="600" height="400" class="box" rx="16"/>
-  <text x="925" y="275" class="t">Cloud Run（Bun + TypeScript）</text>
-  <rect x="925" y="300" width="270" height="150" fill="#f7f6f2" stroke="#c9c6bb" rx="12"/>
-  <text x="945" y="335" font-size="21" font-weight="700">/tick（LLM なし）</text>
-  <text x="945" y="365" class="s">syncToken で差分取得</text>
-  <text x="945" y="393" class="s">発火予定の計算・予約</text>
-  <text x="945" y="421" class="s">allowlist・payload 検証</text>
-  <rect x="1210" y="300" width="270" height="150" fill="#f7f6f2" stroke="#c9c6bb" rx="12"/>
-  <text x="1230" y="335" font-size="21" font-weight="700">agent 実行</text>
-  <text x="1230" y="365" class="s">tool は allowlist</text>
-  <text x="1230" y="393" class="s">読み取り + 提案だけ</text>
-  <text x="1230" y="421" class="s">notes は &lt;untrusted&gt;</text>
-  <rect x="925" y="465" width="555" height="145" fill="#f7f6f2" stroke="#c9c6bb" rx="12"/>
-  <text x="945" y="500" font-size="21" font-weight="700">dashboard（公開・デモ組）</text>
-  <text x="945" y="530" class="s">次の発火予定 / 実行記録（入力・tool・出力）/ 承認待ち</text>
-  <text x="945" y="558" class="s">デモ用フォーム: レート制限・文字数上限・自動削除</text>
-  <text x="945" y="586" class="s">承認したときだけ記録用カレンダーに書く</text>
+  <!-- Cloud Run -->
+  <rect x="840" y="215" width="680" height="410" rx="12" class="card"/>
+  <image href="icons/cloud_run.svg" x="862" y="235" width="40" height="40"/>
+  <text x="914" y="262" class="t">Cloud Run — runner（Bun + TypeScript）</text>
+  <rect x="862" y="295" width="310" height="150" rx="10" fill="#f8f9fa" stroke="#e8eaed"/>
+  <text x="882" y="328" font-size="18" font-weight="600" fill="#202124">/tick</text>
+  <text x="882" y="356" class="s">syncToken で差分を取得</text>
+  <text x="882" y="380" class="s">LLM で実行先と内容を判定</text>
+  <text x="882" y="404" class="s">発火予定の計算・予約</text>
+  <text x="882" y="428" class="s">同じ回は一度だけ</text>
+  <rect x="1188" y="295" width="310" height="150" rx="10" fill="#f8f9fa" stroke="#e8eaed"/>
+  <text x="1208" y="328" font-size="18" font-weight="600" fill="#202124">agent 実行（準備）</text>
+  <text x="1208" y="356" class="s">tool は allowlist</text>
+  <text x="1208" y="380" class="s">読み取り + 提案だけ</text>
+  <text x="1208" y="404" class="s">notes は &lt;untrusted&gt;</text>
+  <rect x="862" y="460" width="636" height="145" rx="10" fill="#f8f9fa" stroke="#e8eaed"/>
+  <text x="882" y="493" font-size="18" font-weight="600" fill="#202124">dashboard</text>
+  <text x="882" y="521" class="s">週表示のカレンダー / セッション（入力・tool・出力）/ 承認待ち</text>
+  <text x="882" y="547" class="s">デモ用フォーム: レート制限・文字数上限・自動削除</text>
+  <text x="882" y="573" class="s">承認したときだけ記録用カレンダーに書く</text>
 
-  <rect x="500" y="680" width="420" height="130" class="box" rx="16"/>
-  <text x="525" y="725" class="t">Firestore</text>
-  <text x="525" y="758" class="s">syncToken・予定・発火予定・発火済み</text>
-  <text x="525" y="786" class="s">実行記録・承認待ち・レート制限</text>
+  <!-- Logging -->
+  <rect x="470" y="420" width="290" height="140" rx="12" class="card"/>
+  <image href="icons/cloud_logging.svg" x="490" y="440" width="40" height="40"/>
+  <text x="542" y="467" class="t">Cloud Logging</text>
+  <text x="490" y="505" class="s">構造化ログ</text>
+  <text x="490" y="529" class="s">同期・発火・tool・token 使用量</text>
 
-  <rect x="1000" y="680" width="500" height="130" class="box" rx="16"/>
-  <text x="1025" y="725" class="t">Vertex AI（Gemini 2.5 Flash）</text>
-  <text x="1025" y="758" class="s">service account で認証（API key なし）</text>
-  <text x="1025" y="786" class="s">function calling で tool を呼ぶ</text>
+  <!-- bottom row -->
+  <rect x="470" y="680" width="330" height="130" rx="12" class="card"/>
+  <image href="icons/firestore.svg" x="490" y="700" width="40" height="40"/>
+  <text x="542" y="727" class="t">Firestore</text>
+  <text x="490" y="765" class="s">予定・発火予定・判定結果</text>
+  <text x="490" y="789" class="s">実行記録・承認待ち・token</text>
 
-  <rect x="500" y="440" width="300" height="170" class="box" rx="16"/>
-  <text x="525" y="485" class="t">Cloud Logging</text>
-  <text x="525" y="518" class="s">構造化ログ</text>
-  <text x="525" y="546" class="s">（同期・発火・tool 呼び出し</text>
-  <text x="525" y="574" class="s">・token 使用量）</text>
+  <rect x="860" y="680" width="310" height="130" rx="12" class="card"/>
+  <image href="icons/vertexai.svg" x="880" y="700" width="40" height="40"/>
+  <text x="932" y="727" class="t">Vertex AI</text>
+  <text x="880" y="765" class="s">Gemini 2.5 Flash</text>
+  <text x="880" y="789" class="s">service account・API key なし</text>
+
+  <rect x="1210" y="680" width="310" height="130" rx="12" class="card"/>
+  <image href="icons/cloud_run.svg" x="1230" y="700" width="40" height="40"/>
+  <text x="1282" y="727" class="t">Cloud Run Job</text>
+  <text x="1230" y="765" class="s">実行ごとの sandbox</text>
+  <text x="1230" y="789" class="s">権限なし・LLM は proxy 経由</text>
 
   <!-- edges -->
-  <path class="e" d="M360 200 H 420 V 128 H 1200 V 226"/>
-  <text x="840" y="118" class="s">閲覧・承認・デモ予定の追加</text>
-  <path class="e" d="M210 320 L 210 400"/>
-  <path class="e" d="M800 295 L 920 340"/>
-  <path class="e" d="M335 530 C 420 530, 420 400, 500 400 H 920"/>
-  <text x="520" y="392" class="s">service account で差分を読む</text>
-  <path class="d" d="M925 595 H 860 V 650 H 420 V 700 H 340"/>
-  <text x="600" y="642" class="s" fill="#a5521b">承認したときだけ書く</text>
-  <path class="e" d="M1060 630 L 900 680"/>
-  <path class="e" d="M1300 630 L 1300 680"/>
-  <path class="e" d="M920 440 L 805 500"/>
+  <path class="e" d="M360 190 H 400 V 120 H 1180 V 210"/>
+  <text x="760" y="112" class="lb">閲覧・承認・予定の追加</text>
+  <path class="e" d="M210 280 V 336"/>
+  <path class="e" d="M760 275 H 836"/>
+  <path class="e" d="M336 495 C 420 495, 420 380, 836 380"/>
+  <text x="470" y="372" class="lb">service account で差分を読む</text>
+  <path class="d" d="M862 590 H 820 V 650 H 400 V 680 H 340"/>
+  <text x="560" y="642" class="lb" fill="#d93025">承認したときだけ書く</text>
+  <path class="e" d="M960 625 L 760 676"/>
+  <path class="e" d="M1015 625 L 1015 676"/>
+  <path class="e" d="M1365 625 L 1365 676"/>
+  <path class="e" d="M862 520 L 764 500"/>
 </svg>

@@ -3,8 +3,12 @@ import { z } from "zod";
 import type { EventTime } from "../calendar/adapter";
 import type { Workspace } from "../config";
 import { DAY, fromWall, occurrences } from "../domain/time";
-import { parsePrepDays, stripPrepLines, type ToolName } from "../domain/payload";
+import { parsePrepDays, stripPrepLines } from "../domain/prep";
 import type { Approval, Store } from "../store/store";
+
+// agent が使える tool の allowlist。準備の固定の組で、読み取りか、承認待ちに入れるだけのものに限る
+export const TOOL_NAMES = ["list_deadlines", "list_schedule", "propose_event"] as const;
+export type ToolName = (typeof TOOL_NAMES)[number];
 
 export type ToolContext = { workspace: Workspace; store: Store; runId: string; now: number };
 
@@ -84,17 +88,6 @@ export const TOOLS: Record<ToolName, Tool> = {
       const days = Math.min(31, Math.max(1, Number((args as { days?: number })?.days ?? 7) || 7));
       return (await upcoming(ctx, "main", days)).map(({ e, t }) => ({ title: clip(e.summary, 80), start: iso(t) }));
     },
-  },
-  list_recent_runs: {
-    declaration: {
-      name: "list_recent_runs",
-      description: "agent の最近の実行記録（何の予定で起動し、どう終わったか）を返す。",
-      parameters: { type: Type.OBJECT, properties: {} },
-    },
-    run: async (_args, ctx) =>
-      (await ctx.store.listRuns(ctx.workspace.id, 8))
-        .filter((r) => r.id !== ctx.runId)
-        .map((r) => ({ title: clip(r.title, 80), kind: r.kind, status: r.status, startedAt: r.startedAt, output: clip(r.output ?? r.reason ?? "") })),
   },
   propose_event: {
     declaration: {

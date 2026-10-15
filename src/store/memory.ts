@@ -1,10 +1,13 @@
 import type { CalendarEvent } from "../calendar/adapter";
+import { LocalWorkerStateSchema, type JudgedDispatch, type LocalWorkerState, type StoredEvent } from "../dispatch/types";
 import { hourBucket, type Approval, type CalendarRole, type Run, type Schedule, type Store } from "./store";
 
 // ローカル確認とテスト用。process が落ちると消える
 export class MemoryStore implements Store {
   private tokens = new Map<string, string>();
-  private events = new Map<string, Map<string, CalendarEvent>>();
+  private events = new Map<string, Map<string, StoredEvent>>();
+  // テストで local worker の登録を置く
+  localWorkers = new Map<string, unknown>();
   private schedules = new Map<string, Schedule>();
   private fires = new Set<string>();
   private runs = new Map<string, Run>();
@@ -18,7 +21,7 @@ export class MemoryStore implements Store {
 
   async applyChanges(ws: string, role: CalendarRole, c: { upserts: CalendarEvent[]; deletes: string[]; reset: boolean; syncToken: string }) {
     const k = `${ws}/${role}`;
-    const map = c.reset ? new Map<string, CalendarEvent>() : (this.events.get(k) ?? new Map());
+    const map = c.reset ? new Map<string, StoredEvent>() : (this.events.get(k) ?? new Map());
     for (const id of c.deletes) map.delete(id);
     for (const e of c.upserts) map.set(e.id, e);
     this.events.set(k, map);
@@ -27,6 +30,17 @@ export class MemoryStore implements Store {
 
   async listEvents(ws: string, role: CalendarRole) {
     return [...(this.events.get(`${ws}/${role}`)?.values() ?? [])];
+  }
+
+  async saveDispatch(ws: string, eventId: string, dispatch: JudgedDispatch) {
+    const map = this.events.get(`${ws}/automation`);
+    const e = map?.get(eventId);
+    if (e) map!.set(eventId, { ...e, dispatch });
+  }
+
+  async getLocalWorkerState(ws: string): Promise<LocalWorkerState | undefined> {
+    const parsed = LocalWorkerStateSchema.safeParse(this.localWorkers.get(ws));
+    return parsed.success ? parsed.data : undefined;
   }
 
   async getSchedule(ws: string) {
@@ -59,6 +73,24 @@ export class MemoryStore implements Store {
   async listRuns(ws: string, limit: number) {
     return this.wsRuns(ws)
       .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+      .slice(0, limit);
+  }
+
+  async getRun(ws: string, id: string) {
+    return this.runs.get(`${ws}/${id}`);
+  }
+
+  async updateRunIf(ws: string, id: string, expected: Run["status"], patch: Partial<Run>) {
+    const r = this.runs.get(`${ws}/${id}`);
+    if (!r || r.status !== expected) return undefined;
+    const next = { ...r, ...patch };
+    this.runs.set(`${ws}/${id}`, next);
+    return next;
+  }
+
+  async listOpenRuns(ws: string, limit: number) {
+    return this.wsRuns(ws)
+      .filter((r) => r.status === "queued" || r.status === "running")
       .slice(0, limit);
   }
 

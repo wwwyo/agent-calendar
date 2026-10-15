@@ -38,8 +38,8 @@ const EnvSchema = z.object({
   TICK_INVOKER_EMAIL: z.string().optional(),
   // ローカル確認用。gcloud で service account を借りた access token を渡す
   GOOGLE_ACCESS_TOKEN: z.string().optional(),
-  // デモ用フォームと承認の上限（1時間あたり）
-  DEMO_LIMIT_PER_IP: z.coerce.number().default(5),
+  // デモ用フォームと承認の上限（1時間あたり）。1人が締切・定期の仕事を足し、提案を承認し、消すまでを2回通せる数
+  DEMO_LIMIT_PER_IP: z.coerce.number().default(10),
   DEMO_LIMIT_GLOBAL: z.coerce.number().default(40),
   // agent の実行の上限（組ごと・1時間あたり）。超えた発火は実行せず記録だけ残す
   RUN_LIMIT_PER_HOUR: z.coerce.number().default(60),

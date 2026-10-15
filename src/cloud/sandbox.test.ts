@@ -2,7 +2,7 @@
 import { describe, expect, test } from "bun:test";
 import * as contract from "../../sandbox/contract";
 import { AGENTS, main, spawnAgent, toResult, type Spawner } from "../../sandbox/entrypoint";
-import { runGemini } from "../../sandbox/gemini";
+import { runGemini, withSources } from "../../sandbox/gemini";
 import { CLOUD_AGENTS, OUTPUT_MAX, SANDBOX_ENV, SANDBOX_PATHS, SANDBOX_TIMEOUT_MS } from "../dispatch/types";
 
 const ENV = { RUN_ID: "r1", AGENT: "gemini", PROMPT: "調べて", RUNNER_URL: "https://runner.example", SANDBOX_TOKEN: "tok", PATH: "/usr/bin" };
@@ -97,6 +97,13 @@ describe("gemini agent", () => {
     expect(await runGemini("p", { runnerUrl: "https://r", token: "t", fetchFn: a.fetchFn, delays: [0] })).toBe("ok");
     const b = recordFetch([new Response("used up", { status: 429 }), new Response("used up", { status: 429 })]);
     await expect(runGemini("p", { runnerUrl: "https://r", token: "t", fetchFn: b.fetchFn, delays: [0] })).rejects.toThrow("429");
+  });
+
+  test("grounding の出典を重複なく、上限までの行で答えの後ろに足す", () => {
+    const web = (n: number) => ({ web: { uri: `https://s/${n}`, title: `site${n}.example` } });
+    const out = withSources("答え", { groundingMetadata: { groundingChunks: [web(1), web(1), { web: {} }, web(2), web(3), web(4), web(5), web(6)] } });
+    expect(out).toBe(["答え", "", "出典:", ...[1, 2, 3, 4, 5].map((n) => `- site${n}.example: https://s/${n}`)].join("\n"));
+    expect(withSources("答え", {})).toBe("答え");
   });
 
   test("答えがなければ throw", async () => {

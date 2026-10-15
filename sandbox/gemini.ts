@@ -11,7 +11,27 @@ const SYSTEM = [
 // proxy が混んだときに取り直す間隔
 const RETRY_DELAYS_MS = [2000, 6000];
 
-type Candidate = { content?: { parts?: { text?: string; thought?: boolean }[] }; finishReason?: string };
+type Candidate = {
+  content?: { parts?: { text?: string; thought?: boolean }[] };
+  finishReason?: string;
+  groundingMetadata?: { groundingChunks?: { web?: { uri?: string; title?: string } }[] };
+};
+
+// 出典の行数の上限
+const SOURCES_MAX = 5;
+
+// Google 検索の grounding で使った出典を、答えの後ろに足す。model は本文に URL を書かないことが多い
+export function withSources(answer: string, c: Candidate | undefined): string {
+  const seen = new Set<string>();
+  const lines: string[] = [];
+  for (const g of c?.groundingMetadata?.groundingChunks ?? []) {
+    const uri = g.web?.uri;
+    if (!uri || seen.has(uri) || lines.length >= SOURCES_MAX) continue;
+    seen.add(uri);
+    lines.push(`- ${g.web?.title ?? uri}: ${uri}`);
+  }
+  return lines.length ? `${answer}\n\n出典:\n${lines.join("\n")}` : answer;
+}
 
 export async function runGemini(
   prompt: string,
@@ -44,7 +64,7 @@ export async function runGemini(
       .join("")
       .trim();
     if (!answer) throw new Error(`Gemini が答えを返さなかった（finishReason: ${c?.finishReason ?? "なし"}）`);
-    return answer;
+    return withSources(answer, c);
   }
 }
 

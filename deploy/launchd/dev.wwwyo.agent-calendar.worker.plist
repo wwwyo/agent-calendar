@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- local worker の雛形。install.sh が __BUN__・__REPO__・__HOME__・__PATH__ を埋めて ~/Library/LaunchAgents/ に置く -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>dev.wwwyo.agent-calendar.worker</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__BUN__</string>
+    <string>__REPO__/src/worker/main.ts</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>__REPO__</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <!-- orca と gcloud（ADC）を見つけるため。agent 自身は Orca の terminal の login shell で動く -->
+    <key>PATH</key>
+    <string>__PATH__</string>
+    <key>HOME</key>
+    <string>__HOME__</string>
+  </dict>
+  <!-- ログイン中だけ動けばよいので LaunchAgent。落ちたら起こし直す -->
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>30</integer>
+  <key>StandardOutPath</key>
+  <string>__HOME__/Library/Logs/agent-calendar-worker.log</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/Library/Logs/agent-calendar-worker.log</string>
+</dict>
+</plist>

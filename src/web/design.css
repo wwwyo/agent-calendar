@@ -139,7 +139,7 @@ body {
 
 /* section は hairline の枠を 1px rule で区切った cell の集まり。角丸・影・隙間なし */
 .frame { display: grid; gap: 1px; border: 1px solid var(--border); background: var(--border); }
-.frame > * { padding: var(--space-6); background: var(--card); }
+.frame > * { min-width: 0; overflow-x: auto; padding: var(--space-6); background: var(--card); }
 /* 枠の四隅の中空 tick（9px border-strong の上に 7px background） */
 .tick { position: relative; }
 .tick::before {

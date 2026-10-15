@@ -1,0 +1,35 @@
+name: dependabot-lockfile
+# security update など、dependabot が workspace 配下の package.json だけを更新して
+# root の bun.lock を追従させない PR を自動修復する。dependabot 起動の pull_request
+# workflow は token が read-only になるため、pull_request_target で動かす。
+on:
+  pull_request_target:
+    types: [opened, synchronize]
+permissions:
+  contents: write
+jobs:
+  regen-lockfile:
+    if: github.actor == 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+      - uses: jdx/mise-action@v5
+        with:
+          version: 2026.8.6
+      # PR の manifest 由来の lifecycle script は実行しない
+      - run: bun install --ignore-scripts
+      - name: bun.lock が変わったときだけ push する
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          if git diff --quiet bun.lock; then
+            echo 'bun.lock is already in sync'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add bun.lock
+          git commit -m 'build(deps): regenerate bun.lock for workspace bump'
+          git push origin "HEAD:refs/heads/$HEAD_REF"

@@ -1,0 +1,11 @@
+node_modules/
+.DS_Store
+.env
+.env.local
+*.log
+*.tsbuildinfo
+dist/
+tmp/
+*.local.*
+# service account の鍵などの秘密は置かない（mise + age で管理する）
+*-key.json

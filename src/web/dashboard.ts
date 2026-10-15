@@ -16,19 +16,16 @@ body{font-family:var(--font-sans);font-size:var(--text-base);line-height:var(--l
 a{color:var(--primary-deep)}
 main{max-width:calc(var(--max-width) + 16px);margin:0 auto;padding:var(--space-2) var(--space-2) var(--space-8)}
 .slab h1{margin:0;font-size:var(--text-2xl)}
-.slab p{margin:0;max-width:40em;font-size:var(--text-lg);line-height:1.5}
-.slab .ws{font-family:var(--font-mono);font-size:var(--text-sm)}
+.slab .back{font-size:var(--text-sm)}
 .slab a{color:var(--primary-foreground)}
 .content{max-width:var(--max-width);margin:0 auto}
 .content > *{margin-top:var(--space-7)}
 .content > .flash{margin-top:var(--space-5)}
 .flash{padding:var(--space-3) var(--space-4);border:1px solid var(--border-strong);border-radius:var(--radius);background:var(--secondary)}
-.cols-3,.cols-2{grid-template-columns:1fr}
-@media(min-width:900px){.cols-3{grid-template-columns:repeat(3,1fr)}.cols-2{grid-template-columns:1fr 1fr}}
+.cols-2{grid-template-columns:1fr}
+@media(min-width:900px){.cols-2{grid-template-columns:1fr 1fr}}
 .frame h2{margin:0 0 var(--space-4);font-size:var(--text-lg);display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:baseline}
-.frame h2 small{color:var(--muted-foreground);font-weight:400;font-size:var(--text-xs);letter-spacing:var(--letter-spacing-body)}
 .frame h3{margin:0 0 var(--space-2);font-size:var(--text-md)}
-.how h3{margin-bottom:var(--space-1)}.how p{margin:0;font-size:var(--text-sm);color:var(--muted-foreground)}
 .label{display:block;font-size:var(--text-xs);color:var(--muted-foreground);margin:var(--space-5) 0 var(--space-1)}
 .live{font-size:var(--text-xs);color:var(--muted-foreground);font-weight:400;margin-left:auto}
 .live::before{content:"";display:inline-block;width:8px;height:8px;border-radius:var(--radius-pill);background:var(--success);margin-right:var(--space-2)}
@@ -38,8 +35,6 @@ main{max-width:calc(var(--max-width) + 16px);margin:0 auto;padding:var(--space-2
 .session:hover .title{color:var(--primary-deep)}
 .meta{font-family:var(--font-mono);font-size:var(--text-xs);color:var(--muted-foreground)}
 .empty{margin:0;color:var(--muted-foreground)}
-summary{cursor:pointer;list-style:none;display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:baseline}summary::-webkit-details-marker{display:none}
-summary::before{content:"+";font-family:var(--font-mono);color:var(--muted-foreground);width:1ch}details[open]>summary::before{content:"\\2212"}
 .actions{display:flex;gap:var(--space-2);margin-top:var(--space-3);flex-wrap:wrap;align-items:center}
 form.inline{display:inline}
 textarea.input{min-height:88px;resize:vertical}
@@ -47,7 +42,6 @@ textarea.input{min-height:88px;resize:vertical}
 .step h3{display:flex;gap:var(--space-2);align-items:baseline}
 .approval{padding:var(--space-3) 0;border-top:1px solid var(--border)}.approval:first-of-type{border-top:0}
 .demo-row{display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:center;font-size:var(--text-sm);padding:var(--space-2) 0;border-top:1px solid var(--border)}
-.foot{display:flex;flex-wrap:wrap;gap:var(--space-4);align-items:center;font-family:var(--font-mono);font-size:var(--text-xs);color:var(--muted-foreground)}
 @media(max-width:620px){.frame > *{padding:var(--space-5)}.slab{padding:var(--space-6) var(--space-5)}.slab h1{font-size:var(--text-xl)}.session{grid-template-columns:1fr}}
 `;
 
@@ -69,63 +63,55 @@ function shell(ws: Workspace, title: string, slab: string, content: string, scri
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="${FONTS}">
 <style>${DESIGN}${PAGE}</style></head><body><div class="page-guides"></div><main>
 <header class="slab">${slab}</header>
-<div class="content">${content}
-<div class="dashed-rule"></div>
-<p class="foot"><span>Cloud Run + Cloud Scheduler + Firestore + Vertex AI (Gemini)</span><a href="https://github.com/wwwyo/agent-calendar">GitHub</a></p>
-</div></main>
+<div class="content">${content}</div></main>
 <script>const WS=${JSON.stringify(ws.id)};const TZ=${JSON.stringify(ws.timeZone)};${CLIENT}${script}</script></body></html>`;
 }
 
 function forms(ws: Workspace, today: string): string {
   return `<form method="post" action="/w/${esc(ws.id)}/demo/automation">
-<h3 class="text-heading">定期の仕事を置く <small class="text-muted">起動用カレンダー</small></h3>
+<h3 class="text-heading">定期の仕事</h3>
 <label class="label" for="a-title">タイトル</label><input class="input" id="a-title" name="title" maxlength="${TITLE_MAX}" required value="今週の締切の確認">
 <label class="label" for="a-starts">開始</label><select class="input" id="a-starts" name="startsIn"><option value="1" selected>1分後</option><option value="3">3分後</option><option value="5">5分後</option><option value="10">10分後</option><option value="30">30分後</option></select>
 <label class="label" for="a-repeat">繰り返し</label><select class="input" id="a-repeat" name="repeat"><option value="none">なし</option><option value="daily3">毎日3回</option><option value="weekly3">毎週3回</option></select>
-<label class="label" for="a-prompt">agent への指示（payload の prompt、${DEMO_PROMPT_MAX}文字まで）</label><textarea class="input" id="a-prompt" name="prompt" maxlength="${DEMO_PROMPT_MAX}" required>記録用カレンダーの締切を確認して、今週やることを3つに絞って。足りない準備の予定があれば提案して。</textarea>
-<div class="actions"><button class="btn btn-primary">起動用カレンダーに書く</button></div>
+<label class="label" for="a-prompt">prompt</label><textarea class="input" id="a-prompt" name="prompt" maxlength="${DEMO_PROMPT_MAX}" required>記録用カレンダーの締切を確認して、今週やることを3つに絞って。足りない準備の予定があれば提案して。</textarea>
+<div class="actions"><button class="btn btn-primary">追加</button></div>
 </form>
 <form method="post" action="/w/${esc(ws.id)}/demo/deadline">
-<h3 class="text-heading">締切を書く <small class="text-muted">記録用カレンダー</small></h3>
+<h3 class="text-heading">締切</h3>
 <label class="label" for="d-title">タイトル</label><input class="input" id="d-title" name="title" maxlength="${TITLE_MAX}" required value="パスポート更新の期限">
 <label class="label" for="d-date">期日</label><input class="input" id="d-date" type="date" name="date" min="${today}" required>
 <label class="label" for="d-prep">準備: N日前</label><input class="input" id="d-prep" type="number" name="prepDays" min="0" max="365" value="30" required>
-<label class="label" for="d-notes">notes（${DEMO_NOTES_MAX}文字まで。agent には信頼しないデータとして渡る）</label><textarea class="input" id="d-notes" name="notes" maxlength="${DEMO_NOTES_MAX}">申請書・写真・旧パスポートが要る。</textarea>
-<div class="actions"><button class="btn btn-primary">記録用カレンダーに書く</button></div>
+<label class="label" for="d-notes">notes</label><textarea class="input" id="d-notes" name="notes" maxlength="${DEMO_NOTES_MAX}">申請書・写真・旧パスポートが要る。</textarea>
+<div class="actions"><button class="btn btn-primary">追加</button></div>
 </form>`;
 }
 
 // セッション（agent の1回の実行）の一覧。数秒ごとに読み直す
 export function renderSessionsPage(ws: Workspace, today: string, flash?: string): string {
-  const slab = `<span class="ws">workspace / ${esc(ws.label)}</span><h1 class="text-heading">agent-calendar</h1>
-<p>予定と締切を Google Calendar に書いておくと、agent（Gemini）がそれに合わせて準備と定期の仕事を自分で始める。</p>`;
+  const slab = `<h1 class="text-heading">agent-calendar</h1>`;
   const content = `${flash ? `<div class="flash">${esc(flash)}</div>` : ""}
-<div class="frame tick cols-3 how"><div><h3 class="text-heading">起動用カレンダー</h3><p>繰り返し予定の notes 先頭に payload（prompt）を書く。作成者が allowlist にある予定だけが開始時刻に発火する。</p></div>
-<div><h3 class="text-heading">記録用カレンダー</h3><p>締切の notes に「準備: N日前」と書くと、期日の N 日前に準備が始まる。notes は信頼しないデータとして渡す。</p></div>
-<div><h3 class="text-heading">承認</h3><p>agent はカレンダーに直接書けない。予定の追加は提案になり、人が承認したときだけ書かれる。</p></div></div>
-<div class="frame tick"><section><h2 class="text-heading">セッション <small>agent の1回の実行。開くと入力・tool 呼び出し・出力を見られる</small><span class="live">3秒ごとに更新</span></h2>
+<div class="frame tick"><section><h2 class="text-heading">セッション<span class="live">live</span></h2>
 <p class="next" id="next"></p><div id="list"><p class="empty">読み込み中。</p></div></section></div>
-<div class="frame tick"><section><details><summary><h2 class="text-heading" style="margin:0">試す <small>runner の service account がデモカレンダーに書く</small></h2></summary>
-<p class="text-muted">期日まで N 日を切っていれば「遅れて登録」として1分以内に準備が始まる。誰でも書けるので、IP ごとと全体の1時間あたりの回数に上限がある。足した予定は一定時間後に自動で消える。</p>
-<div class="frame cols-2" style="margin-top:var(--space-4)">${forms(ws, today)}</div>
-<div id="demo" style="margin-top:var(--space-4)"></div></details></section></div>`;
+<div class="frame tick"><section><h2 class="text-heading">予定を追加</h2>
+<div class="cols-2" style="display:grid;gap:var(--space-6)">${forms(ws, today)}</div>
+<div id="demo" style="margin-top:var(--space-4)"></div></section></div>`;
   const script = `
 poll(async()=>{
   const r=await fetch("/w/"+WS+"/api/sessions");if(!r.ok)return;const d=await r.json();
   document.getElementById("next").innerHTML=d.next.length?"次の発火: "+d.next.map((n)=>'<span class="mono">'+esc(when(n.fireAt))+'</span> '+esc(n.title)+(n.blocked?' <span class="status-bad">発火しない（'+esc(n.blocked)+'）</span>':"")).join(" · "):"";
-  document.getElementById("demo").innerHTML=d.demoEvents.length?'<h3 class="text-heading">デモで足した予定</h3>'+d.demoEvents.map((e)=>'<div class="demo-row"><span class="chip">'+(e.role==="automation"?"起動用":"記録用")+'</span>'+esc(e.title)+'<span class="text-muted">'+esc(when(e.expiresAt))+' に自動で消える</span><form class="inline" method="post" action="/w/'+WS+'/demo/events/'+e.role+'/'+encodeURIComponent(e.id)+'/delete"><button class="btn btn-outline">消す</button></form></div>').join(""):"";
-  document.getElementById("list").innerHTML=d.sessions.length?d.sessions.map((s)=>'<a class="session" href="/w/'+WS+'/sessions/'+encodeURIComponent(s.id)+'"><span>'+status(s)+'</span><span><span class="title">'+esc(s.title)+'</span><div class="meta"><span class="chip">'+kind(s)+'</span> '+esc(when(s.startedAt))+(s.late?" · 遅れて登録":"")+(s.toolCalls?" · tool "+s.toolCalls:"")+(s.pendingApprovals?' · <span class="status-warn">承認待ち '+s.pendingApprovals+'</span>':"")+'</div></span><span class="meta">'+esc(secs(s))+'</span></a>').join(""):'<p class="empty">セッションはまだない。「試す」から予定を足すと、1分ほどでここに出る。</p>';
+  document.getElementById("demo").innerHTML=d.demoEvents.length?'<h3 class="text-heading">追加した予定</h3>'+d.demoEvents.map((e)=>'<div class="demo-row"><span class="chip">'+(e.role==="automation"?"起動用":"記録用")+'</span>'+esc(e.title)+'<span class="text-muted">'+esc(when(e.expiresAt))+' まで</span><form class="inline" method="post" action="/w/'+WS+'/demo/events/'+e.role+'/'+encodeURIComponent(e.id)+'/delete"><button class="btn btn-outline">消す</button></form></div>').join(""):"";
+  document.getElementById("list").innerHTML=d.sessions.length?d.sessions.map((s)=>'<a class="session" href="/w/'+WS+'/sessions/'+encodeURIComponent(s.id)+'"><span>'+status(s)+'</span><span><span class="title">'+esc(s.title)+'</span><div class="meta"><span class="chip">'+kind(s)+'</span> '+esc(when(s.startedAt))+(s.late?" · 遅れて登録":"")+(s.toolCalls?" · tool "+s.toolCalls:"")+(s.pendingApprovals?' · <span class="status-warn">承認待ち '+s.pendingApprovals+'</span>':"")+'</div></span><span class="meta">'+esc(secs(s))+'</span></a>').join(""):'<p class="empty">セッションはまだない。予定を追加すると1分ほどでここに出る。</p>';
 },3000);`;
   return shell(ws, "agent-calendar", slab, content, script);
 }
 
 // セッション詳細。実行中のあいだだけ実行ログを読み直す（承認・却下はページ遷移で反映する）
 export function renderSessionPage(ws: Workspace, id: string, flash?: string): string {
-  const slab = `<span class="ws"><a href="/w/${esc(ws.id)}">← セッション一覧</a> / ${esc(ws.label)}</span><h1 class="text-heading" id="title">読み込み中</h1>`;
+  const slab = `<a class="back" href="/w/${esc(ws.id)}">← セッション一覧</a><h1 class="text-heading" id="title">読み込み中</h1>`;
   const content = `${flash ? `<div class="flash">${esc(flash)}</div>` : ""}
-<div class="frame tick"><section><h2 class="text-heading"><span id="st"></span> <small id="kind"></small></h2><div class="meta" id="meta"></div></section></div>
-<div class="frame tick"><section><h2 class="text-heading">実行ログ <small>入力・tool 呼び出し・出力。実行中は2秒ごとに更新</small></h2><div id="log"></div></section></div>
-<div class="frame tick" id="approvals-frame" hidden><section><h2 class="text-heading">承認待ち <small>agent の提案。人が承認したときだけ記録用カレンダーに書く</small></h2><div id="approvals"></div></section></div>`;
+<div class="frame tick"><section><h2 class="text-heading"><span id="st"></span> <span class="meta" id="kind"></span></h2><div class="meta" id="meta"></div></section></div>
+<div class="frame tick"><section><h2 class="text-heading">実行ログ</h2><div id="log"></div></section></div>
+<div class="frame tick" id="approvals-frame" hidden><section><h2 class="text-heading">提案</h2><div id="approvals"></div></section></div>`;
   const script = `
 const ID=${JSON.stringify(id)};
 const block=(s)=>'<pre class="code">'+esc(s)+'</pre>';

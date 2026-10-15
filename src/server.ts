@@ -173,7 +173,7 @@ const server = Bun.serve({
         if (!(await allowWrite(req, srv, ws))) return back(ws, LIMITED);
         const e = await write(ws, () => calendar.insertEvent(ws.calendars.automation, automationEvent(f.data, ws, Date.now(), cfg.DEMO_EVENT_TTL_HOURS)));
         log("info", "demo event created", { workspace: ws.id, role: "automation", eventId: e.id });
-        return back(ws, `起動用カレンダーに「${f.data.title}」を書いた。開始時刻になると発火する（1分以内に発火予定に出る）。`);
+        return back(ws, `「${f.data.title}」を追加した。`);
       },
     },
     "/w/:ws/demo/deadline": {
@@ -187,7 +187,7 @@ const server = Bun.serve({
         if (!(await allowWrite(req, srv, ws))) return back(ws, LIMITED);
         const e = await write(ws, () => calendar.insertEvent(ws.calendars.records, ev));
         log("info", "demo event created", { workspace: ws.id, role: "records", eventId: e.id });
-        return back(ws, `記録用カレンダーに「${f.data.title}」を書いた。準備を始める日を過ぎていれば1分以内に準備が始まる。`);
+        return back(ws, `「${f.data.title}」を追加した。`);
       },
     },
     "/w/:ws/demo/events/:role/:id/delete": {
@@ -200,7 +200,7 @@ const server = Bun.serve({
         if (!e?.tags[DEMO_EXPIRES_TAG]) return back(ws, "デモで足した予定だけを消せる。");
         if (!(await allowWrite(req, srv, ws))) return back(ws, LIMITED);
         await write(ws, () => calendar.deleteEvent(ws.calendars[role], e.id));
-        return back(ws, `「${e.summary}」を消した。1分以内に発火予定から外れる。`);
+        return back(ws, `「${e.summary}」を消した。`);
       },
     },
     "/w/:ws/approvals/:id/:decision": {
@@ -224,7 +224,7 @@ const server = Bun.serve({
             tags: { [DEMO_EXPIRES_TAG]: new Date(Date.now() + cfg.DEMO_EVENT_TTL_HOURS * 60 * 60 * 1000).toISOString() },
           });
           await store.saveApproval(ws.id, { ...a, createdEventId: created.id });
-          return back(ws, `承認して記録用カレンダーに「${op.summary}」を追加した。`, to);
+          return back(ws, `「${op.summary}」を追加した。`, to);
         } catch (e) {
           await store.saveApproval(ws.id, { ...a, status: "failed", error: (e as Error).message.slice(0, 300) });
           return back(ws, "カレンダーへの追加に失敗した。", to);

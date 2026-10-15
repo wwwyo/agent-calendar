@@ -85,7 +85,10 @@ export async function runAgent(input: {
           ? await TOOLS[name as ToolName].run(call.args ?? {}, ctx).catch((e: Error) => ({ error: e.message }))
           : { error: `tool ${name} は許可されていない` };
         toolCalls.push({ name, args: call.args ?? {}, result });
-        await input.onProgress?.({ ...run, status: "running", toolCalls: [...toolCalls], usage: { ...usage } });
+        // 途中経過の保存は表示のためだけなので、失敗しても実行は続ける
+        await input.onProgress?.({ ...run, status: "running", toolCalls: [...toolCalls], usage: { ...usage } }).catch((e: Error) =>
+          log("warn", "progress save failed", { runId: run.id, error: e.message }),
+        );
         log("info", "tool call", { runId: run.id, tool: name });
         parts.push({ functionResponse: { id: call.id, name, response: { result } } });
       }

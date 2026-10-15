@@ -85,11 +85,24 @@ const sessionsCache = new Map<string, { at: number; body: unknown }>();
 async function sessionsJson(ws: Workspace) {
   const hit = sessionsCache.get(ws.id);
   if (hit && Date.now() - hit.at < SESSIONS_CACHE_MS) return hit.body;
-  const [schedule, runs, approvals] = await Promise.all([store.getSchedule(ws.id), store.listRuns(ws.id, 30), store.listApprovals(ws.id, 50)]);
+  const [schedule, runs, approvals, automation, records] = await Promise.all([
+    store.getSchedule(ws.id),
+    store.listRuns(ws.id, 30),
+    store.listApprovals(ws.id, 50),
+    store.listEvents(ws.id, "automation"),
+    store.listEvents(ws.id, "records"),
+  ]);
   const pending = new Map<string, number>();
   for (const a of approvals) if (a.status === "pending") pending.set(a.runId, (pending.get(a.runId) ?? 0) + 1);
   const body = {
-    next: (schedule?.items ?? []).slice(0, 3).map((i) => ({ fireAt: i.fireAt, title: i.title, blocked: !!i.blocked })),
+    next: (schedule?.items ?? []).slice(0, 3).map((i) => ({ fireAt: i.fireAt, title: i.title, blocked: i.blocked })),
+    // デモ用フォームで足した予定（dashboard から消せる）
+    demoEvents: [
+      ...automation.map((e) => ({ role: "automation" as const, e })),
+      ...records.map((e) => ({ role: "records" as const, e })),
+    ]
+      .filter(({ e }) => e.tags[DEMO_EXPIRES_TAG] && e.status !== "cancelled" && !e.recurringEventId)
+      .map(({ role, e }) => ({ role, id: e.id, title: e.summary, expiresAt: e.tags[DEMO_EXPIRES_TAG] })),
     sessions: runs.map((r) => ({
       id: r.id,
       title: r.title,

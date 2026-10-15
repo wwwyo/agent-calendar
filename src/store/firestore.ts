@@ -1,6 +1,7 @@
 import { Firestore, type DocumentReference } from "@google-cloud/firestore";
 import type { AuthClient } from "google-auth-library";
 import type { CalendarEvent } from "../calendar/adapter";
+import { LocalWorkerStateSchema, type JudgedDispatch, type StoredEvent } from "../dispatch/types";
 import { expireAfterDays, hourBucket, RETENTION, type Approval, type CalendarRole, type Run, type Schedule, type Store } from "./store";
 
 // Firestore の doc id に使えない文字（/）を避ける
@@ -48,7 +49,26 @@ export class FirestoreStore implements Store {
 
   async listEvents(ws: string, role: CalendarRole) {
     const snap = await this.ws(ws).collection("events").where("role", "==", role).get();
-    return snap.docs.map((d) => d.get("event") as CalendarEvent);
+    return snap.docs.map((d) => {
+      const dispatch = d.get("dispatch") as JudgedDispatch | undefined;
+      return { ...(d.get("event") as CalendarEvent), ...(dispatch ? { dispatch } : {}) } as StoredEvent;
+    });
+  }
+
+  async saveDispatch(ws: string, eventId: string, dispatch: JudgedDispatch) {
+    try {
+      await this.ws(ws).collection("events").doc(docId(`automation:${eventId}`)).update({ dispatch });
+    } catch (e) {
+      // NOT_FOUND: 判定している間に予定が消えた
+      if ((e as { code?: number }).code === 5) return;
+      throw e;
+    }
+  }
+
+  async getLocalWorkerState(ws: string) {
+    const snap = await this.ws(ws).collection("state").doc("local").get();
+    const parsed = LocalWorkerStateSchema.safeParse(snap.data());
+    return parsed.success ? parsed.data : undefined;
   }
 
   async getSchedule(ws: string) {
@@ -90,6 +110,22 @@ export class FirestoreStore implements Store {
   async getRun(ws: string, id: string) {
     const snap = await this.ws(ws).collection("runs").doc(docId(id)).get();
     return snap.exists ? (snap.data() as Run) : undefined;
+  }
+
+  async updateRunIf(ws: string, id: string, expected: Run["status"], patch: Partial<Run>) {
+    const ref = this.ws(ws).collection("runs").doc(docId(id));
+    return this.db.runTransaction(async (tx) => {
+      const r = (await tx.get(ref)).data() as Run | undefined;
+      if (!r || r.status !== expected) return undefined;
+      const next: Run = { ...r, ...patch };
+      tx.update(ref, patch);
+      return next;
+    });
+  }
+
+  async listOpenRuns(ws: string, limit: number) {
+    const snap = await this.ws(ws).collection("runs").where("status", "in", ["queued", "running"]).limit(limit).get();
+    return snap.docs.map((d) => d.data() as Run);
   }
 
   async countRunsSince(ws: string, since: string) {

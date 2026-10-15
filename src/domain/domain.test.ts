@@ -1,8 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { CalendarEvent } from "../calendar/adapter";
 import type { Workspace } from "../config";
-import { notesToText } from "./notes";
-import { parsePayload, parsePrepDays, stripPrepLines } from "./payload";
+import type { JudgedDispatch, StoredEvent } from "../dispatch/types";
+import { parsePrepDays, stripPrepLines } from "./prep";
 import { computeSchedule } from "./schedule";
 import { occurrences } from "./time";
 
@@ -13,23 +12,14 @@ const ws: Workspace = {
   timeZone: "Asia/Tokyo",
   calendars: { automation: "a", records: "r" },
   allowedCreators: ["me@example.com"],
+  allowLocal: false,
 };
 
-const ev = (p: Partial<CalendarEvent>): CalendarEvent => ({ id: "e1", status: "confirmed", summary: "t", notes: "", tags: {}, creatorEmail: "me@example.com", ...p });
+const ev = (p: Partial<StoredEvent>): StoredEvent => ({ id: "e1", status: "confirmed", summary: "t", notes: "", tags: {}, creatorEmail: "me@example.com", updated: "u1", ...p });
+const meta = { eventUpdated: "u1", judgedAt: "2026-10-15T00:00:00Z", model: "fake" };
+const ready: JudgedDispatch = { status: "ready", executor: "cloud", agent: "gemini", prompt: "hi", ...meta };
 
-describe("payload", () => {
-  test("先頭の front matter を読む", () => {
-    const r = parsePayload("\n---\nprompt: 締切を確認して\ntools: [list_deadlines]\n---\nメモ");
-    expect(r).toEqual({ ok: true, payload: { prompt: "締切を確認して", tools: ["list_deadlines"] } });
-  });
-  test("HTML の notes も改行を保って読む", () => {
-    expect(parsePayload(notesToText("---<br>prompt: hi<br>---")).ok).toBe(true);
-  });
-  test("知らない項目・allowlist 外の tool・先頭以外の payload は読まない", () => {
-    expect(parsePayload("---\nprompt: x\nrun: rm\n---").ok).toBe(false);
-    expect(parsePayload("---\nprompt: x\ntools: [shell]\n---").ok).toBe(false);
-    expect(parsePayload("メモ\n---\nprompt: x\n---").ok).toBe(false);
-  });
+describe("準備", () => {
   test("準備: N日前", () => {
     expect(parsePrepDays("書類が要る\n準備：30日前")).toBe(30);
     expect(parsePrepDays("準備は30日前から")).toBeUndefined();
@@ -51,20 +41,29 @@ describe("occurrences", () => {
 
 describe("computeSchedule", () => {
   const now = Date.parse("2026-10-15T12:00:00+09:00");
-  test("作成者が allowlist にない・payload が読めない予定は blocked で載る", () => {
+  test("判定が ready の予定だけ dispatch を載せ、作成者・判定前・blocked・古い判定は理由つきで blocked", () => {
+    const start = { dateTime: "2026-10-15T13:00:00+09:00" };
     const items = computeSchedule({
       workspace: ws,
       automation: [
-        ev({ id: "ok", notes: "---\nprompt: hi\n---", start: { dateTime: "2026-10-15T13:00:00+09:00" } }),
-        ev({ id: "who", creatorEmail: "x@example.com", notes: "---\nprompt: hi\n---", start: { dateTime: "2026-10-15T13:00:00+09:00" } }),
-        ev({ id: "bad", notes: "hi", start: { dateTime: "2026-10-15T13:00:00+09:00" } }),
+        ev({ id: "ok", start, dispatch: ready }),
+        ev({ id: "who", creatorEmail: "x@example.com", start, dispatch: ready }),
+        ev({ id: "none", start }),
+        ev({ id: "bad", start, dispatch: { status: "blocked", reason: "作業の指示を読み取れない", ...meta } }),
+        ev({ id: "old", start, updated: "u2", dispatch: ready }),
       ],
       records: [],
       from: now,
       now,
       horizon: 86400000,
     });
-    expect(Object.fromEntries(items.map((i) => [i.eventId, i.blocked ? "blocked" : "ok"]))).toEqual({ ok: "ok", who: "blocked", bad: "blocked" });
+    expect(Object.fromEntries(items.map((i) => [i.eventId, i.blocked ?? i.dispatch]))).toEqual({
+      ok: { status: "ready", executor: "cloud", agent: "gemini", prompt: "hi" },
+      who: "作成者 x@example.com が allowlist にない",
+      none: "判定がまだ済んでいない",
+      bad: "作業の指示を読み取れない",
+      old: "判定がまだ済んでいない",
+    });
   });
   test("準備は何か月先でも拾い、発火日を過ぎて登録されたら late", () => {
     const items = computeSchedule({

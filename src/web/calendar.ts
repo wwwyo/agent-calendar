@@ -1,7 +1,7 @@
 import type { CalendarEvent } from "../calendar/adapter";
 import type { Workspace } from "../config";
-import { parsePayload } from "../domain/payload";
-import { computeSchedule, exceptionsByMaster, isAllowedCreator } from "../domain/schedule";
+import type { ReadyDispatch, StoredEvent } from "../dispatch/types";
+import { automationBlocked, computeSchedule, exceptionsByMaster } from "../domain/schedule";
 import { DAY, eventTz, fromWall, isAllDay, occurrences, toWall } from "../domain/time";
 import { DEMO_EXPIRES_TAG } from "../runner";
 import type { Run } from "../store/store";
@@ -21,29 +21,25 @@ export type CalendarItem = {
   deletable: boolean;
   expiresAt?: string;
   blocked?: string;
+  // 起動用の予定の判定結果。発火の前に実行先・agent・target・prompt を確かめられるようにする
+  dispatch?: Omit<ReadyDispatch, "status">;
   sessions: { id: string; status: Run["status"]; startedAt: string }[];
 };
 
 const day = (t: number, tz: string) => new Date(toWall(t, tz)).toISOString().slice(0, 10);
 
 // [from, to) に入る回を、起動用・記録用の予定と、準備が始まる時刻に分けて返す
-export function calendarItems(input: { ws: Workspace; automation: CalendarEvent[]; records: CalendarEvent[]; runs: Run[]; from: number; to: number; now: number }): CalendarItem[] {
+export function calendarItems(input: { ws: Workspace; automation: StoredEvent[]; records: CalendarEvent[]; runs: Run[]; from: number; to: number; now: number }): CalendarItem[] {
   const { ws, from, to } = input;
   const runsOf = (pred: (r: Run) => boolean) => input.runs.filter(pred).map((r) => ({ id: r.id, status: r.status, startedAt: r.startedAt }));
   const items: CalendarItem[] = [];
   for (const [role, events] of [["automation", input.automation], ["records", input.records]] as const) {
     const ex = exceptionsByMaster(events, ws.timeZone);
-    for (const e of events) {
+    for (const e of events as StoredEvent[]) {
       if (e.status === "cancelled" || !e.start) continue;
-      const blocked =
-        role !== "automation"
-          ? undefined
-          : !isAllowedCreator(e, ws)
-            ? `作成者 ${e.creatorEmail ?? "(不明)"} が allowlist にない`
-            : (() => {
-                const p = parsePayload(e.notes);
-                return p.ok ? undefined : `payload を読めない: ${p.reason}`;
-              })();
+      const blocked = role === "automation" ? automationBlocked(e, ws) : undefined;
+      const d = !blocked && e.dispatch?.status === "ready" ? e.dispatch : undefined;
+      const dispatch = d ? { executor: d.executor, agent: d.agent, ...(d.target ? { target: d.target } : {}), prompt: d.prompt } : undefined;
       const allDay = isAllDay(e.start);
       // 終了が読めない予定は30分として描く
       const span = e.end && !isAllDay(e.end) && !isAllDay(e.start) ? (Date.parse(e.end.dateTime) - Date.parse(e.start.dateTime)) / 60000 : NaN;
@@ -62,6 +58,7 @@ export function calendarItems(input: { ws: Workspace; automation: CalendarEvent[
           deletable: !!e.tags[DEMO_EXPIRES_TAG],
           expiresAt: e.tags[DEMO_EXPIRES_TAG],
           blocked,
+          dispatch,
           sessions: role === "automation" ? runsOf((r) => r.kind === "automation" && r.eventId === e.id && r.scheduledAt === iso) : runsOf((r) => r.kind === "prep" && r.eventId === e.id),
         });
       }

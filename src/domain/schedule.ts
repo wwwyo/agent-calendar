@@ -1,6 +1,7 @@
 import type { CalendarEvent } from "../calendar/adapter";
 import type { Workspace } from "../config";
-import { parsePayload, parsePrepDays, type Payload } from "./payload";
+import type { ReadyDispatch, StoredEvent } from "../dispatch/types";
+import { parsePrepDays } from "./prep";
 import { DAY, eventTz, fromWall, isAllDay, occurrences, startInstant, toWall } from "./time";
 
 export type FireItem = {
@@ -11,7 +12,8 @@ export type FireItem = {
   fireAt: string;
   // automation: 回の開始時刻。prep: 締切の開始時刻
   occurrenceStart: string;
-  payload?: Payload;
+  // automation: 判定結果（実行先・agent・target・prompt）。blocked の回は持たない
+  dispatch?: ReadyDispatch;
   prepDays?: number;
   // 予定を足した時点で発火日を過ぎていた
   late?: boolean;
@@ -41,16 +43,31 @@ export function exceptionsByMaster(events: CalendarEvent[], tz: string): Map<str
 }
 
 // 個別に変更された回は、親ではなくその回の内容（notes・作成者）で扱う
-function singles(events: CalendarEvent[]): CalendarEvent[] {
+function singles<T extends CalendarEvent>(events: T[]): T[] {
   return events.filter((e) => e.status !== "cancelled");
 }
 
-function automationItems(events: CalendarEvent[], ws: Workspace, from: number, to: number): FireItem[] {
+// 予定を発火させない理由。作成者・判定の順に見る
+export function automationBlocked(e: StoredEvent, ws: Workspace): string | undefined {
+  if (!isAllowedCreator(e, ws)) return `作成者 ${e.creatorEmail ?? "(不明)"} が allowlist にない`;
+  const d = e.dispatch;
+  if (!d || d.eventUpdated !== (e.updated ?? "")) return "判定がまだ済んでいない";
+  if (d.status === "blocked") return d.reason;
+  return undefined;
+}
+
+function readyDispatch(e: StoredEvent): ReadyDispatch | undefined {
+  const d = e.dispatch;
+  if (d?.status !== "ready") return undefined;
+  return { status: "ready", executor: d.executor, agent: d.agent, ...(d.target ? { target: d.target } : {}), prompt: d.prompt };
+}
+
+function automationItems(events: StoredEvent[], ws: Workspace, from: number, to: number): FireItem[] {
   const ex = exceptionsByMaster(events, ws.timeZone);
   const items: FireItem[] = [];
   for (const e of singles(events)) {
-    const blockedByCreator = isAllowedCreator(e, ws) ? undefined : `作成者 ${e.creatorEmail ?? "(不明)"} が allowlist にない`;
-    const parsed = parsePayload(e.notes);
+    const blocked = automationBlocked(e, ws);
+    const dispatch = blocked ? undefined : readyDispatch(e);
     for (const t of occurrences(e, ws.timeZone, from, to, ex.get(e.id))) {
       const iso = new Date(t).toISOString();
       items.push({
@@ -60,8 +77,8 @@ function automationItems(events: CalendarEvent[], ws: Workspace, from: number, t
         title: e.summary,
         fireAt: iso,
         occurrenceStart: iso,
-        payload: parsed.ok ? parsed.payload : undefined,
-        blocked: blockedByCreator ?? (parsed.ok ? undefined : `payload を読めない: ${parsed.reason}`),
+        ...(dispatch ? { dispatch } : {}),
+        ...(blocked ? { blocked } : {}),
       });
     }
   }
@@ -105,7 +122,7 @@ function prepItems(events: CalendarEvent[], ws: Workspace, now: number): FireIte
 // automation は (from, now + horizon] の回を、準備は未来の締切すべてを発火予定にする
 export function computeSchedule(input: {
   workspace: Workspace;
-  automation: CalendarEvent[];
+  automation: StoredEvent[];
   records: CalendarEvent[];
   from: number;
   now: number;

@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { OAuth2Client } from "google-auth-library";
 import { createAuthClient } from "./auth";
+import type { CloudLauncher } from "./dispatch/types";
 import { ServiceAccountCalendar } from "./calendar/service-account";
 import { loadConfig, type Workspace } from "./config";
 import { log } from "./log";
@@ -22,7 +23,10 @@ const ai = new GoogleGenAI({
   location: cfg.VERTEX_LOCATION,
   ...(cfg.GOOGLE_ACCESS_TOKEN ? { googleAuthOptions: { authClient: auth as never } } : {}),
 });
-const deps: Deps = { cfg, store, calendar, ai };
+// cloud sandbox（src/cloud/）をつなぐまでの仮置き。統合のときに C の CloudLauncher の実装と handleSandbox に差し替える
+const cloud: CloudLauncher | undefined = undefined;
+const handleSandbox = async (_req: Request): Promise<Response | undefined> => undefined;
+const deps: Deps = { cfg, store, calendar, ai, cloud };
 const oidc = new OAuth2Client();
 
 async function verifyTick(req: Request): Promise<boolean> {
@@ -111,6 +115,10 @@ async function sessionsJson(ws: Workspace) {
       title: r.title,
       kind: r.kind,
       status: r.status,
+      executor: r.executor,
+      agent: r.agent,
+      target: r.target,
+      deadlineAt: r.deadlineAt,
       startedAt: r.startedAt,
       finishedAt: r.finishedAt,
       late: r.late,
@@ -245,7 +253,8 @@ const server = Bun.serve({
       },
     },
   },
-  fetch: () => new Response("not found", { status: 404 }),
+  // /sandbox/llm・/sandbox/result は sandbox の token で認証する（src/cloud/）
+  fetch: async (req) => (await handleSandbox(req)) ?? new Response("not found", { status: 404 }),
   error: (e) => {
     if (e instanceof WriteFailed) return back(e.ws, e.message);
     log("error", "request failed", { error: e.message });

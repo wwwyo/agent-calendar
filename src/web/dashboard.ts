@@ -88,11 +88,13 @@ textarea.input{min-height:88px;resize:vertical}
 const CLIENT = `
 const esc=(s)=>String(s??"").replace(/[&<>"']/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
 const when=(iso)=>iso?new Date(iso).toLocaleString("ja-JP",{timeZone:TZ,month:"numeric",day:"numeric",weekday:"short",hour:"2-digit",minute:"2-digit",second:"2-digit"}):"";
-// Cloud Run の timeout（5分）を過ぎても running なら、実行中に process が落ちた
+// deadlineAt（無ければ開始から10分。Cloud Run の timeout は5分）を過ぎても running なら、実行中に落ちた
 const STALE=10*60*1000;
-const running=(r)=>r.status==="running"&&Date.now()-Date.parse(r.startedAt)<STALE;
-const status=(r)=>r.status==="succeeded"?'<span class="status-ok">成功</span>':r.status==="failed"?'<span class="status-bad">失敗</span>':r.status==="skipped"?'<span class="status-warn">実行せず</span>':running(r)?'<span class="status-warn">実行中</span>':'<span class="status-bad">中断</span>';
+const running=(r)=>r.status==="running"&&Date.now()<(r.deadlineAt?Date.parse(r.deadlineAt):Date.parse(r.startedAt)+STALE);
+const status=(r)=>r.status==="succeeded"?'<span class="status-ok">成功</span>':r.status==="failed"?'<span class="status-bad">失敗</span>':r.status==="skipped"?'<span class="status-warn">実行せず</span>':r.status==="queued"?'<span class="status-warn">待機中</span>':running(r)?'<span class="status-warn">実行中</span>':'<span class="status-bad">中断</span>';
 const kind=(r)=>r.kind==="automation"?"定期の仕事":"準備";
+// 実行先と agent（判定で回した回だけ）
+const where=(r)=>r.executor?[r.executor,r.agent,r.target].filter(Boolean).join(" · "):"";
 const secs=(r)=>r.finishedAt?((Date.parse(r.finishedAt)-Date.parse(r.startedAt))/1000).toFixed(1)+"s":"";
 // タブが見えている間だけ読みに行く。fn が false を返したら止める
 function poll(fn,ms){let t,stop=false;const tick=async()=>{if(stop)return;if(!document.hidden){try{if(await fn()===false){stop=true;return}}catch(e){}}t=setTimeout(tick,ms)};tick();document.addEventListener("visibilitychange",()=>{if(!document.hidden&&!stop){clearTimeout(t);tick()}})}
@@ -111,10 +113,10 @@ function addDialog(ws: Workspace): string {
   return `<dialog id="add" class="dialog" aria-labelledby="add-h">
 <div class="dialog-head"><h2 class="text-heading" id="add-h">予定を追加</h2><div class="tabs" role="tablist"><button type="button" class="tab" role="tab" data-tab="automation">定期の仕事</button><button type="button" class="tab" role="tab" data-tab="deadline">締切</button></div></div>
 <form method="post" data-tab-panel="automation" data-base="/w/${esc(ws.id)}/demo/automation" action="/w/${esc(ws.id)}/demo/automation">
-<label class="label" for="a-title">タイトル</label><input class="input" id="a-title" name="title" maxlength="${TITLE_MAX}" required value="今週の締切の確認">
+<label class="label" for="a-title">タイトル</label><input class="input" id="a-title" name="title" maxlength="${TITLE_MAX}" required value="AI ニュースのまとめ">
 <label class="label" for="a-start">開始</label><input class="input" id="a-start" type="datetime-local" name="start" required>
 <label class="label" for="a-repeat">繰り返し</label><select class="input" id="a-repeat" name="repeat"><option value="none">なし</option><option value="daily3">毎日3回</option><option value="weekly3">毎週3回</option></select>
-<label class="label" for="a-prompt">prompt</label><textarea class="input" id="a-prompt" name="prompt" maxlength="${DEMO_PROMPT_MAX}" required>記録用カレンダーの締切を確認して、今週やることを3つに絞って。足りない準備の予定があれば提案して。</textarea>
+<label class="label" for="a-prompt">notes</label><textarea class="input" id="a-prompt" name="prompt" maxlength="${DEMO_PROMPT_MAX}" required>今週の生成 AI のニュースを3つ調べて、要点を1行ずつまとめて。</textarea>
 <div class="actions"><button class="btn btn-primary">起動用カレンダーに追加</button><button type="button" class="btn btn-outline" data-close>閉じる</button></div>
 </form>
 <form method="post" data-tab-panel="deadline" data-base="/w/${esc(ws.id)}/demo/deadline" action="/w/${esc(ws.id)}/demo/deadline" hidden>
@@ -236,6 +238,7 @@ document.querySelector(".cal").addEventListener("click",(e)=>{
   document.getElementById("ev-body").innerHTML='<h2 class="text-heading" id="ev-h">'+esc(it.title)+'</h2>'
     +'<p class="meta"><span class="chip">'+ROLE[it.role]+'</span> '+esc(time)+(it.recurring?" · 繰り返し":"")+'</p>'
     +(it.blocked?'<p class="status-bad">発火しない（'+esc(it.blocked)+'）</p>':"")
+    +(it.dispatch?'<h3 class="text-heading">判定</h3><p class="meta"><span class="chip">'+esc(it.dispatch.executor)+'</span> '+esc([it.dispatch.agent,it.dispatch.target].filter(Boolean).join(" · "))+'</p><pre class="code">'+esc(it.dispatch.prompt)+'</pre>':"")
     +(it.sessions.length?'<h3 class="text-heading">セッション</h3>'+it.sessions.map((s)=>'<a class="ev-session" href="/w/'+WS+'/sessions/'+encodeURIComponent(s.id)+'">'+status(s)+'<span class="meta">'+esc(when(s.startedAt))+'</span><span>開く →</span></a>').join(""):"")
     +(it.notes?'<h3 class="text-heading">notes</h3><pre class="code">'+esc(it.notes)+'</pre>':"")
     +'<div class="actions">'+(it.deletable?'<form class="inline" method="post" action="/w/'+WS+'/demo/events/'+role+'/'+encodeURIComponent(it.id)+'/delete#'+week+'"><button class="btn btn-outline">'+(it.role==="prep"?"締切ごと消す":it.recurring?"繰り返しごと消す":"消す")+'</button></form>':'<span class="text-muted">デモで足した予定だけ消せる。</span>')
@@ -250,7 +253,7 @@ document.getElementById("cal-body").scrollTop=Math.max(0,(Math.floor(wall(Date.n
 poll(async()=>{await load()},5000);
 poll(async()=>{
   const r=await fetch("/w/"+WS+"/api/sessions");if(!r.ok)return;const d=await r.json();
-  document.getElementById("list").innerHTML=d.sessions.length?d.sessions.map((s)=>'<a class="session" href="/w/'+WS+'/sessions/'+encodeURIComponent(s.id)+'"><span>'+status(s)+'</span><span><span class="title">'+esc(s.title)+'</span><div class="meta"><span class="chip">'+kind(s)+'</span> '+esc(when(s.startedAt))+(s.late?" · 遅れて登録":"")+(s.toolCalls?" · tool "+s.toolCalls:"")+(s.pendingApprovals?' · <span class="status-warn">承認待ち '+s.pendingApprovals+'</span>':"")+'</div></span><span class="meta">'+esc(secs(s))+'</span></a>').join(""):'<p class="empty">セッションはまだない。カレンダーに予定を追加すると、1分ほどでここに出る。</p>';
+  document.getElementById("list").innerHTML=d.sessions.length?d.sessions.map((s)=>'<a class="session" href="/w/'+WS+'/sessions/'+encodeURIComponent(s.id)+'"><span>'+status(s)+'</span><span><span class="title">'+esc(s.title)+'</span><div class="meta"><span class="chip">'+kind(s)+'</span> '+(where(s)?'<span class="chip">'+esc(where(s))+'</span> ':"")+esc(when(s.startedAt))+(s.late?" · 遅れて登録":"")+(s.toolCalls?" · tool "+s.toolCalls:"")+(s.pendingApprovals?' · <span class="status-warn">承認待ち '+s.pendingApprovals+'</span>':"")+'</div></span><span class="meta">'+esc(secs(s))+'</span></a>').join(""):'<p class="empty">セッションはまだない。カレンダーに予定を追加すると、1分ほどでここに出る。</p>';
 },3000);`;
   return shell(ws, "agent-calendar", slab, content, script);
 }
@@ -272,17 +275,18 @@ poll(async()=>{
   document.getElementById("title").textContent=s.title;
   document.getElementById("st").innerHTML=status(s);
   document.getElementById("kind").textContent=kind(s)+(s.late?" · 遅れて登録":"");
-  document.getElementById("meta").textContent=[when(s.startedAt),s.model,s.usage?"tokens "+s.usage.totalTokens:"",secs(s),"run "+s.id.slice(0,8)].filter(Boolean).join(" · ");
+  document.getElementById("meta").textContent=[when(s.startedAt),where(s),s.workerId?"worker "+s.workerId:"",s.model,s.usage?"tokens "+s.usage.totalTokens:"",secs(s),"run "+s.id.slice(0,8)].filter(Boolean).join(" · ");
   const steps=[];
-  if(s.input)steps.push('<div class="step"><h3 class="text-heading">入力</h3>'+block(s.input)+'</div>');
+  if(s.input)steps.push('<div class="step"><h3 class="text-heading">'+(s.executor?"prompt":"入力")+'</h3>'+block(s.input)+'</div>');
   for(const t of s.toolCalls)steps.push('<div class="step"><h3 class="text-heading">tool <span class="mono">'+esc(t.name)+'</span></h3>'+block(JSON.stringify(t.args,null,1))+block("→ "+JSON.stringify(t.result,null,1))+'</div>');
   if(s.reason)steps.push('<div class="step"><h3 class="text-heading '+(s.status==="failed"?"status-bad":"status-warn")+'">'+(s.status==="failed"?"失敗":"実行しなかった理由")+'</h3><p>'+esc(s.reason)+'</p></div>');
   if(s.output)steps.push('<div class="step"><h3 class="text-heading">出力</h3>'+block(s.output)+'</div>');
   if(running(s))steps.push('<div class="step"><h3 class="text-heading status-warn">実行中</h3></div>');
+  if(s.status==="queued")steps.push('<div class="step"><h3 class="text-heading status-warn">待機中</h3><p>local worker が受け取るのを待っている。</p></div>');
   document.getElementById("log").innerHTML=steps.join("");
   document.getElementById("approvals-frame").hidden=!approvals.length;
   document.getElementById("approvals").innerHTML=approvals.map((a)=>'<div class="approval"><b>'+esc(a.operation.summary)+'</b> <span class="mono">'+esc(a.operation.start.date||when(a.operation.start.dateTime))+'</span>'+(a.operation.notes?'<p class="text-muted">'+esc(a.operation.notes)+'</p>':"")+'<div class="actions">'+(a.status==="pending"?'<form class="inline" method="post" action="/w/'+WS+'/approvals/'+encodeURIComponent(a.id)+'/approve"><button class="btn btn-primary">承認して追加</button></form><form class="inline" method="post" action="/w/'+WS+'/approvals/'+encodeURIComponent(a.id)+'/reject"><button class="btn btn-outline">却下</button></form>':'<span class="chip">'+({approved:"承認済み",rejected:"却下",failed:"失敗"})[a.status]+'</span>')+'</div></div>').join("");
-  return running(s)?undefined:false;
+  return running(s)||s.status==="queued"?undefined:false;
 },2000);`;
   return shell(ws, "agent-calendar · session", slab, content, script);
 }

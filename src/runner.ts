@@ -1,12 +1,24 @@
 import type { GoogleGenAI } from "@google/genai";
 import type { CalendarAdapter, CalendarEvent } from "./calendar/adapter";
 import type { Config, Workspace } from "./config";
-import { computeSchedule, type FireItem } from "./domain/schedule";
+import { computeSchedule, isAllowedCreator, type FireItem } from "./domain/schedule";
 import { buildTask, runAgent } from "./agent/agent";
+import { judgeEvent, needsJudge } from "./dispatch/judge";
+import {
+  CLOUD_AGENTS,
+  JUDGE_PER_TICK,
+  SANDBOX_GRACE_MS,
+  SANDBOX_TIMEOUT_MS,
+  type CloudAgent,
+  type CloudLauncher,
+  type DispatchChoices,
+  type StoredEvent,
+} from "./dispatch/types";
 import { log } from "./log";
 import type { CalendarRole, Run, Schedule, Store } from "./store/store";
 
-export type Deps = { cfg: Config; store: Store; calendar: CalendarAdapter; ai: GoogleGenAI; now?: () => number };
+// cloud: 無ければ cloud の回は failed で記録する（ローカル確認など sandbox の job がない環境）
+export type Deps = { cfg: Config; store: Store; calendar: CalendarAdapter; ai: GoogleGenAI; cloud?: CloudLauncher; now?: () => number };
 
 // automation の回はこの先まで発火予定に載せる
 const HORIZON = 48 * 60 * 60 * 1000;
@@ -16,6 +28,10 @@ const RECOMPUTE_EVERY = 60 * 60 * 1000;
 const FIRES_PER_TICK = 4;
 // runner が止まっていた間の automation の回は、この時間より古ければ実行しない
 const CATCH_UP_LIMIT = 6 * 60 * 60 * 1000;
+// local worker がこの時間たっても受け取らない queued は skipped にする（worker 側の 6 時間ルールより少し長く待つ）
+const LOCAL_UNCLAIMED_MS = 7 * 60 * 60 * 1000;
+// 1 tick で後始末を見る Run の上限
+const OPEN_RUNS_PER_TICK = 50;
 
 export const DEMO_EXPIRES_TAG = "agentCalendarDemoExpiresAt";
 
@@ -59,7 +75,40 @@ async function recompute(deps: Deps, ws: Workspace, prev: Schedule | undefined, 
   const items = computeSchedule({ workspace: ws, automation, records, from, now, horizon: HORIZON });
   const due = items.filter((i) => Date.parse(i.fireAt) <= now).map((i) => i.key);
   const fired = await deps.store.firedKeys(ws.id, due);
-  return { items: items.filter((i) => !fired.has(i.key)), computedAt: new Date(now).toISOString(), watermark: prev?.watermark ?? new Date(now).toISOString() };
+  const retries = automation.flatMap((e) => (e.dispatch?.retryAt && isAllowedCreator(e, ws) ? [e.dispatch.retryAt] : [])).sort();
+  return {
+    items: items.filter((i) => !fired.has(i.key)),
+    computedAt: new Date(now).toISOString(),
+    watermark: prev?.watermark ?? new Date(now).toISOString(),
+    ...(retries[0] ? { judgeRetryAt: retries[0] } : {}),
+  };
+}
+
+async function dispatchChoices(deps: Deps, ws: Workspace): Promise<DispatchChoices> {
+  const local = ws.allowLocal ? await deps.store.getLocalWorkerState(ws.id) : undefined;
+  return { cloudAgents: CLOUD_AGENTS, ...(local ? { local: { agents: local.agents, targets: local.targets } } : {}) };
+}
+
+// 足された・変わった起動用の予定を判定する。作成者が allowlist にない予定は判定にかけない
+async function judgePending(deps: Deps, ws: Workspace, now: number): Promise<{ judged: number; remaining: boolean }> {
+  const events = await deps.store.listEvents(ws.id, "automation");
+  const pending = events.filter((e) => e.status !== "cancelled" && isAllowedCreator(e, ws) && needsJudge(e, now));
+  if (pending.length === 0) return { judged: 0, remaining: false };
+  const choices = await dispatchChoices(deps, ws);
+  const batch = pending.slice(0, JUDGE_PER_TICK);
+  for (const e of batch) await judgeOne(deps, ws, e, choices, now);
+  return { judged: batch.length, remaining: pending.length > batch.length };
+}
+
+async function judgeOne(deps: Deps, ws: Workspace, e: StoredEvent, choices: DispatchChoices, now: number) {
+  const dispatch = await judgeEvent({ ai: deps.ai, model: deps.cfg.GEMINI_MODEL, event: e, choices, allowLocal: ws.allowLocal, now });
+  await deps.store.saveDispatch(ws.id, e.id, dispatch);
+  log(dispatch.status === "ready" ? "info" : "warn", "event judged", {
+    workspace: ws.id,
+    eventId: e.id,
+    status: dispatch.status,
+    ...(dispatch.status === "ready" ? { executor: dispatch.executor, agent: dispatch.agent, target: dispatch.target } : { reason: dispatch.reason }),
+  });
 }
 
 async function fire(deps: Deps, ws: Workspace, item: FireItem, now: number): Promise<Run | undefined> {
@@ -91,7 +140,8 @@ async function fire(deps: Deps, ws: Workspace, item: FireItem, now: number): Pro
     log("warn", "run limit reached", { workspace: ws.id, key: item.key });
     return run;
   }
-  const records = item.kind === "prep" ? await deps.store.listEvents(ws.id, "records") : [];
+  if (item.kind === "automation") return dispatchRun(deps, ws, item, base, now);
+  const records = await deps.store.listEvents(ws.id, "records");
   const event = records.find((e) => e.id === item.eventId);
   const task = buildTask(item, event, ws.timeZone, now);
   await deps.store.saveRun(ws.id, { ...base, status: "running", model: deps.cfg.GEMINI_MODEL, input: task.input });
@@ -116,6 +166,65 @@ async function fire(deps: Deps, ws: Workspace, item: FireItem, now: number): Pro
   return run;
 }
 
+const isCloudAgent = (a: string): a is CloudAgent => (CLOUD_AGENTS as readonly string[]).includes(a);
+
+// 起動用の回を判定結果の実行先に回す。cloud は sandbox の job を起こし、local は worker が受け取るのを待つ
+async function dispatchRun(deps: Deps, ws: Workspace, item: FireItem, base: Run, now: number): Promise<Run> {
+  const d = item.dispatch;
+  const finished = (status: Run["status"], reason: string): Run => ({ ...base, status, reason, finishedAt: base.startedAt });
+  if (!d) {
+    const run = finished("skipped", "判定がまだ済んでいない");
+    await deps.store.saveRun(ws.id, run);
+    return run;
+  }
+  const fields = { executor: d.executor, agent: d.agent, ...(d.target ? { target: d.target } : {}), input: d.prompt };
+  if (d.executor === "local") {
+    const run: Run = { ...base, ...fields, status: "queued" };
+    await deps.store.saveRun(ws.id, run);
+    log("info", "run queued", { workspace: ws.id, runId: run.id, key: item.key, agent: d.agent, target: d.target });
+    return run;
+  }
+  if (!deps.cloud || !isCloudAgent(d.agent)) {
+    const run = { ...finished("failed", deps.cloud ? `agent「${d.agent}」は cloud で使えない` : "cloud の sandbox が設定されていない"), ...fields };
+    await deps.store.saveRun(ws.id, run);
+    log("error", "cloud run not started", { workspace: ws.id, runId: run.id, reason: run.reason });
+    return run;
+  }
+  // 結果は job から /sandbox/result で返る。running を先に書いてから起こす
+  const running: Run = { ...base, ...fields, status: "running", deadlineAt: new Date(now + SANDBOX_TIMEOUT_MS + SANDBOX_GRACE_MS).toISOString() };
+  await deps.store.saveRun(ws.id, running);
+  try {
+    const started = await deps.cloud.start({ workspace: ws.id, runId: base.id, agent: d.agent, prompt: d.prompt });
+    log("info", "cloud run started", { workspace: ws.id, runId: base.id, execution: started.execution });
+    // 起こしている間に結果が返っていれば上書きしない
+    return (await deps.store.updateRunIf(ws.id, base.id, "running", started)) ?? running;
+  } catch (e) {
+    const reason = `sandbox を起こせなかった: ${(e as Error).message.slice(0, 300)}`;
+    log("error", "cloud run not started", { workspace: ws.id, runId: base.id, reason });
+    return (await deps.store.updateRunIf(ws.id, base.id, "running", { status: "failed", reason, finishedAt: new Date((deps.now ?? Date.now)()).toISOString() })) ?? running;
+  }
+}
+
+// 結果が返らない cloud の回と、worker が受け取らない local の回を閉じる
+async function sweepRuns(deps: Deps, ws: Workspace, now: number): Promise<number> {
+  const at = new Date(now).toISOString();
+  let n = 0;
+  for (const r of await deps.store.listOpenRuns(ws.id, OPEN_RUNS_PER_TICK)) {
+    let done: Run | undefined;
+    if (r.executor === "cloud" && r.status === "running" && r.deadlineAt && Date.parse(r.deadlineAt) < now) {
+      // token は deadlineAt と同じ時刻に切れ、running でない Run への結果は捨てられる
+      done = await deps.store.updateRunIf(ws.id, r.id, "running", { status: "failed", reason: "sandbox から結果が返らなかった", finishedAt: at });
+    } else if (r.executor === "local" && r.status === "queued" && now - Date.parse(r.scheduledAt) > LOCAL_UNCLAIMED_MS) {
+      done = await deps.store.updateRunIf(ws.id, r.id, "queued", { status: "skipped", reason: "local worker が受け取らなかった", finishedAt: at });
+    }
+    if (done) {
+      n++;
+      log("warn", "run closed", { workspace: ws.id, runId: r.id, status: done.status, reason: done.reason });
+    }
+  }
+  return n;
+}
+
 // デモ用フォームで足した予定は、期限が来たらカレンダーから消す
 async function cleanupDemoEvents(deps: Deps, ws: Workspace, now: number): Promise<number> {
   let n = 0;
@@ -131,7 +240,7 @@ async function cleanupDemoEvents(deps: Deps, ws: Workspace, now: number): Promis
   return n;
 }
 
-export type TickResult = { workspace: string; changed: boolean; fired: number; due: number; cleaned: number };
+export type TickResult = { workspace: string; changed: boolean; judged: number; fired: number; due: number; closed: number; cleaned: number };
 
 export async function tickWorkspace(deps: Deps, ws: Workspace): Promise<TickResult> {
   const now = (deps.now ?? Date.now)();
@@ -139,7 +248,12 @@ export async function tickWorkspace(deps: Deps, ws: Workspace): Promise<TickResu
   for (const role of roles(ws)) changed = (await sync(deps, ws, role)) || changed;
 
   let schedule = await deps.store.getSchedule(ws.id);
-  if (changed || !schedule || schedule.stale || now - Date.parse(schedule.computedAt) > RECOMPUTE_EVERY) {
+  // 変化のない tick では LLM を呼ばない。判定の残り（stale）・失敗のやり直し（judgeRetryAt）・1時間ごとの計算し直し
+  // （この機能より前から保存されている、判定のない予定を拾う）のときだけ判定する
+  const retryDue = !!schedule?.judgeRetryAt && Date.parse(schedule.judgeRetryAt) <= now;
+  const recomputeDue = !schedule || !!schedule.stale || retryDue || now - Date.parse(schedule.computedAt) > RECOMPUTE_EVERY;
+  const judging = changed || recomputeDue ? await judgePending(deps, ws, now) : { judged: 0, remaining: false };
+  if (!schedule || changed || judging.judged > 0 || recomputeDue) {
     schedule = await recompute(deps, ws, schedule, now);
     await deps.store.saveSchedule(ws.id, schedule);
   }
@@ -155,9 +269,12 @@ export async function tickWorkspace(deps: Deps, ws: Workspace): Promise<TickResu
     items: schedule.items.filter((i) => !done.has(i.key)),
     // 実行しきれなかった回が残っていれば、watermark はそこで止める
     watermark: new Date(due.length > FIRES_PER_TICK ? Date.parse(due[FIRES_PER_TICK]!.fireAt) - 1 : now).toISOString(),
+    // 判定しきれなかった予定が残っていれば、次の tick で続ける
+    stale: judging.remaining || undefined,
   });
+  const closed = await sweepRuns(deps, ws, now);
   const cleaned = await cleanupDemoEvents(deps, ws, now);
-  return { workspace: ws.id, changed, fired, due: due.length, cleaned };
+  return { workspace: ws.id, changed, judged: judging.judged, fired, due: due.length, closed, cleaned };
 }
 
 export async function tick(deps: Deps): Promise<TickResult[] | "busy"> {

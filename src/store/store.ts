@@ -1,6 +1,6 @@
 import type { CalendarEvent, EventTime } from "../calendar/adapter";
 import type { FireItem } from "../domain/schedule";
-import type { RunDispatchFields } from "../dispatch/types";
+import type { JudgedDispatch, LocalWorkerState, RunDispatchFields, StoredEvent } from "../dispatch/types";
 
 export type CalendarRole = "automation" | "records" | "main";
 
@@ -9,8 +9,10 @@ export type Schedule = {
   computedAt: string;
   // automation の回はここより後のものを発火させる。tick ごとに進める
   watermark: string;
-  // 予定の差分を取り込んだが、まだ計算し直していない
+  // 予定の差分を取り込んだが、まだ計算し直していない（判定の残りがあるときも立てる）
   stale?: boolean;
+  // 判定に失敗した予定のうち、最も早く判定し直す時刻
+  judgeRetryAt?: string;
 };
 
 export type ToolCallRecord = { name: string; args: unknown; result: unknown };
@@ -52,7 +54,12 @@ export interface Store {
   getSyncToken(ws: string, role: CalendarRole): Promise<string | undefined>;
   // 差分を反映して syncToken を進める。reset なら先に保存済みの予定を消す
   applyChanges(ws: string, role: CalendarRole, changes: { upserts: CalendarEvent[]; deletes: string[]; reset: boolean; syncToken: string }): Promise<void>;
-  listEvents(ws: string, role: CalendarRole): Promise<CalendarEvent[]>;
+  // automation の予定には判定結果（dispatch）が付く。予定が変わると applyChanges で消える
+  listEvents(ws: string, role: CalendarRole): Promise<StoredEvent[]>;
+  // 予定が消えていれば何もしない
+  saveDispatch(ws: string, eventId: string, dispatch: JudgedDispatch): Promise<void>;
+  // local worker が書く `workspaces/{ws}/state/local`。形が合わなければ undefined
+  getLocalWorkerState(ws: string): Promise<LocalWorkerState | undefined>;
 
   getSchedule(ws: string): Promise<Schedule | undefined>;
   saveSchedule(ws: string, schedule: Schedule): Promise<void>;
@@ -64,6 +71,10 @@ export interface Store {
   saveRun(ws: string, run: Run): Promise<void>;
   listRuns(ws: string, limit: number): Promise<Run[]>;
   getRun(ws: string, id: string): Promise<Run | undefined>;
+  // status が expected のときだけ patch を書く（worker・sandbox の結果と取り合っても上書きしない）
+  updateRunIf(ws: string, id: string, expected: Run["status"], patch: Partial<Run>): Promise<Run | undefined>;
+  // 終わっていない Run（queued・running）
+  listOpenRuns(ws: string, limit: number): Promise<Run[]>;
   countRunsSince(ws: string, since: string): Promise<number>;
 
   saveApproval(ws: string, approval: Approval): Promise<void>;

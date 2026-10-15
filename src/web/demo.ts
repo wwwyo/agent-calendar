@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { NewEvent } from "../calendar/adapter";
 import type { Workspace } from "../config";
-import { formatPayload, PREP_DAYS_MAX, stripPrepLines } from "../domain/payload";
+import { PREP_DAYS_MAX, stripPrepLines } from "../domain/prep";
 import { DAY, fromWall, toWall } from "../domain/time";
 import { DEMO_EXPIRES_TAG } from "../runner";
 
@@ -23,6 +23,7 @@ export const AutomationForm = z.object({
   // カレンダーで選んだ開始（tz の壁時計。datetime-local の値）
   start: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/),
   repeat: z.enum(["none", "daily3", "weekly3"]),
+  // 自然言語のまま notes に書く。実行先・agent・prompt は取り込んだときに判定する
   prompt: z.string().trim().min(1).max(DEMO_PROMPT_MAX),
 });
 
@@ -56,7 +57,7 @@ export function automationEvent(f: z.infer<typeof AutomationForm>, ws: Workspace
   const last = start + (f.repeat === "daily3" ? 2 * DAY : f.repeat === "weekly3" ? 14 * DAY : 0);
   return {
     summary: f.title,
-    notes: `${formatPayload({ prompt: f.prompt })}\n\n${MARK}`,
+    notes: `${f.prompt}\n\n${MARK}`,
     start: { dateTime: new Date(start).toISOString(), timeZone: ws.timeZone },
     end: { dateTime: new Date(start + 15 * minute).toISOString(), timeZone: ws.timeZone },
     recurrence,

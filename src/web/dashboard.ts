@@ -147,7 +147,7 @@ ${input.flash ? `<div class="flash">${esc(input.flash)}</div>` : ""}
 <div><b>承認待ち</b>agent はカレンダーに直接書けない。予定の追加は提案になり、人が承認したときだけ書かれる。</div></div>
 <div class="grid">
 <section><h2>次の発火予定 <small>Cloud Scheduler が1分ごとに差分を取る（LLM は呼ばない）</small></h2>${scheduleRows(input.schedule?.items ?? [], tz)}</section>
-<section><h2>承認待ち <small>${pending.length}件</small></h2>${approvalList(ws, pending, tz)}${decided.length ? `<h2 style="margin-top:16px">決定済み</h2>${approvalList(ws, decided, tz)}` : ""}</section>
+<section><h2>承認待ち <small>${pending.length}件</small></h2>${approvalList(ws, pending.slice(0, 4), tz)}${pending.length > 4 ? `<p class="muted">ほか ${pending.length - 4} 件</p>` : ""}${decided.length ? `<h2 style="margin-top:16px">決定済み</h2>${approvalList(ws, decided.slice(0, 3), tz)}` : ""}</section>
 </div>
 <section style="margin-top:16px"><h2>実行記録 <small>入力・tool 呼び出し・出力</small> <a href="" style="margin-left:auto;font-size:13px">更新</a></h2>${runList(input.runs, tz)}</section>
 <section style="margin-top:16px"><h2>試す <small>runner の service account がデモカレンダーに書く</small></h2>${forms(ws, input.today)}<h2 style="margin-top:12px">デモで足した予定</h2>${demoEvents(ws, input.demoEvents, tz)}</section>

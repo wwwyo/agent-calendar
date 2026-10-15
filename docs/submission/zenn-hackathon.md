@@ -5,6 +5,7 @@
 - デプロイ URL: https://agent-calendar-785713600547.asia-northeast1.run.app
 - リポジトリ: https://github.com/wwwyo/agent-calendar
 - 構成図: [docs/architecture.png](../architecture.png)
+- dashboard の画面: [docs/dashboard.png](../dashboard.png)
 
 ## プロジェクト名
 

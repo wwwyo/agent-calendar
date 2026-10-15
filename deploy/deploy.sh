@@ -34,6 +34,12 @@ gcloud run deploy "$SERVICE" --project "$PROJECT" --region "$REGION" --source . 
   --allow-unauthenticated --min-instances 0 --max-instances 2 --concurrency 20 \
   --cpu 1 --memory 512Mi --timeout 300 --quiet
 
+# 古い記録を消す TTL ポリシー（expireAt）。設定済みなら変わらない
+for group in fires runs approvals ratelimits; do
+  gcloud firestore fields ttls update expireAt --collection-group="$group" --enable-ttl \
+    --project "$PROJECT" --async --quiet >/dev/null
+done
+
 if gcloud scheduler jobs describe tick --project "$PROJECT" --location "$REGION" >/dev/null 2>&1; then
   verb=update
 else

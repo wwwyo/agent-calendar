@@ -26,14 +26,14 @@ export class FirestoreStore implements Store {
 
   async applyChanges(ws: string, role: CalendarRole, c: { upserts: CalendarEvent[]; deletes: string[]; reset: boolean; syncToken: string }) {
     const events = this.ws(ws).collection("events");
-    if (c.reset) {
-      const old = await events.where("role", "==", role).select().get();
-      await this.writeAll(old.docs.map((d) => (b) => b.delete(d.ref)));
-    }
+    // 全件を取り直したときは、新しい予定を書いてから、含まれない古い予定を消す（途中で落ちても空にならない）
+    const keep = new Set(c.upserts.map((e) => docId(`${role}:${e.id}`)));
+    const stale = c.reset ? (await events.where("role", "==", role).select().get()).docs.filter((d) => !keep.has(d.id)) : [];
     await this.writeAll([
       ...c.deletes.map((id) => (b: FirebaseFirestore.WriteBatch) => b.delete(events.doc(docId(`${role}:${id}`)))),
       ...c.upserts.map((e) => (b: FirebaseFirestore.WriteBatch) => b.set(events.doc(docId(`${role}:${e.id}`)), { role, event: e })),
     ]);
+    await this.writeAll(stale.map((d) => (b: FirebaseFirestore.WriteBatch) => b.delete(d.ref)));
     // 予定を書き終えてから syncToken を進める。途中で落ちても次の tick で同じ差分を取り直す
     await this.ws(ws).collection("calendars").doc(role).set({ syncToken: c.syncToken, syncedAt: new Date().toISOString() });
   }

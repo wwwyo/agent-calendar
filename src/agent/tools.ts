@@ -120,7 +120,10 @@ export const TOOLS: Record<ToolName, Tool> = {
       const start = toEventTime(parsed.data.start, tz);
       if (!start) return { error: "start を日時として読めない" };
       let end = parsed.data.end ? toEventTime(parsed.data.end, tz) : undefined;
-      if (!end || ("date" in end) !== ("date" in start)) {
+      const startAt = "date" in start ? Date.parse(start.date) : Date.parse(start.dateTime);
+      const endAt = !end ? NaN : "date" in end ? Date.parse(end.date) : Date.parse(end.dateTime);
+      // 種類が違う・start 以前の end は、承認後の書き込みで失敗するので既定に直す
+      if (!end || ("date" in end) !== ("date" in start) || !(endAt > startAt)) {
         end = "date" in start ? { date: nextDay(start.date) } : { dateTime: iso(Date.parse(start.dateTime) + 30 * 60 * 1000), timeZone: tz };
       }
       const approval: Approval = {

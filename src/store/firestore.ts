@@ -87,6 +87,11 @@ export class FirestoreStore implements Store {
     return snap.docs.map((d) => d.data() as Run);
   }
 
+  async getRun(ws: string, id: string) {
+    const snap = await this.ws(ws).collection("runs").doc(docId(id)).get();
+    return snap.exists ? (snap.data() as Run) : undefined;
+  }
+
   async countRunsSince(ws: string, since: string) {
     const snap = await this.ws(ws).collection("runs").where("startedAt", ">=", since).select("status").get();
     return snap.docs.filter((d) => d.get("status") !== "skipped").length;

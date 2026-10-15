@@ -91,16 +91,17 @@ async function fire(deps: Deps, ws: Workspace, item: FireItem, now: number): Pro
     log("warn", "run limit reached", { workspace: ws.id, key: item.key });
     return run;
   }
-  await deps.store.saveRun(ws.id, { ...base, status: "running" });
   const records = item.kind === "prep" ? await deps.store.listEvents(ws.id, "records") : [];
   const event = records.find((e) => e.id === item.eventId);
   const task = buildTask(item, event, ws.timeZone, now);
+  await deps.store.saveRun(ws.id, { ...base, status: "running", model: deps.cfg.GEMINI_MODEL, input: task.input });
   const run = await runAgent({
     ai: deps.ai,
     model: deps.cfg.GEMINI_MODEL,
     run: base,
     task,
     ctx: { workspace: ws, store: deps.store, runId: base.id, now },
+    onProgress: (r) => deps.store.saveRun(ws.id, r),
   });
   await deps.store.saveRun(ws.id, run);
   log(run.status === "failed" ? "error" : "info", "run finished", {

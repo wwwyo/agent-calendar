@@ -46,6 +46,8 @@ export async function runAgent(input: {
   run: Run;
   task: { input: string; tools: ToolName[] };
   ctx: ToolContext;
+  // 途中経過を保存し、dashboard で逐次読めるようにする
+  onProgress?: (run: Run) => Promise<void>;
 }): Promise<Run> {
   const { ai, model, task, ctx } = input;
   const run: Run = { ...input.run, model, input: task.input };
@@ -83,6 +85,7 @@ export async function runAgent(input: {
           ? await TOOLS[name as ToolName].run(call.args ?? {}, ctx).catch((e: Error) => ({ error: e.message }))
           : { error: `tool ${name} は許可されていない` };
         toolCalls.push({ name, args: call.args ?? {}, result });
+        await input.onProgress?.({ ...run, status: "running", toolCalls: [...toolCalls], usage: { ...usage } });
         log("info", "tool call", { runId: run.id, tool: name });
         parts.push({ functionResponse: { id: call.id, name, response: { result } } });
       }

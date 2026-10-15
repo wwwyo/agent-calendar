@@ -62,6 +62,7 @@ export interface Store {
 
   saveRun(ws: string, run: Run): Promise<void>;
   listRuns(ws: string, limit: number): Promise<Run[]>;
+  getRun(ws: string, id: string): Promise<Run | undefined>;
   countRunsSince(ws: string, since: string): Promise<number>;
 
   saveApproval(ws: string, approval: Approval): Promise<void>;

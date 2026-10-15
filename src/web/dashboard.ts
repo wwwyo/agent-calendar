@@ -1,22 +1,9 @@
 import { readFileSync } from "node:fs";
-import type { CalendarEvent, EventTime } from "../calendar/adapter";
 import type { Workspace } from "../config";
-import type { FireItem } from "../domain/schedule";
-import { DEMO_EXPIRES_TAG } from "../runner";
-import type { Approval, Run, Schedule } from "../store/store";
 import { DEMO_NOTES_MAX, DEMO_PROMPT_MAX, TITLE_MAX } from "./demo";
 
 export const esc = (s: unknown) =>
   String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
-
-function when(iso: string | undefined, tz: string): string {
-  if (!iso) return "";
-  return new Date(iso).toLocaleString("ja-JP", { timeZone: tz, month: "numeric", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit" });
-}
-
-function timeLabel(t: EventTime, tz: string): string {
-  return "date" in t ? t.date : when(t.dateTime, tz);
-}
 
 // design.css は design.md の css block の写し。design.md を正本にして再生成する
 const DESIGN = readFileSync(new URL("./design.css", import.meta.url), "utf8");
@@ -31,102 +18,69 @@ main{max-width:calc(var(--max-width) + 16px);margin:0 auto;padding:var(--space-2
 .slab h1{margin:0;font-size:var(--text-2xl)}
 .slab p{margin:0;max-width:40em;font-size:var(--text-lg);line-height:1.5}
 .slab .ws{font-family:var(--font-mono);font-size:var(--text-sm)}
+.slab a{color:var(--primary-foreground)}
 .content{max-width:var(--max-width);margin:0 auto}
 .content > *{margin-top:var(--space-7)}
 .content > .flash{margin-top:var(--space-5)}
 .flash{padding:var(--space-3) var(--space-4);border:1px solid var(--border-strong);border-radius:var(--radius);background:var(--secondary)}
 .cols-3,.cols-2{grid-template-columns:1fr}
-@media(min-width:900px){.cols-3{grid-template-columns:repeat(3,1fr)}.cols-2{grid-template-columns:1.2fr 1fr}.cols-2.even{grid-template-columns:1fr 1fr}}
+@media(min-width:900px){.cols-3{grid-template-columns:repeat(3,1fr)}.cols-2{grid-template-columns:1fr 1fr}}
 .frame h2{margin:0 0 var(--space-4);font-size:var(--text-lg);display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:baseline}
 .frame h2 small{color:var(--muted-foreground);font-weight:400;font-size:var(--text-xs);letter-spacing:var(--letter-spacing-body)}
-.frame h2 a{margin-left:auto;font-size:var(--text-sm);font-weight:400}
 .frame h3{margin:0 0 var(--space-2);font-size:var(--text-md)}
 .how h3{margin-bottom:var(--space-1)}.how p{margin:0;font-size:var(--text-sm);color:var(--muted-foreground)}
 .label{display:block;font-size:var(--text-xs);color:var(--muted-foreground);margin:var(--space-5) 0 var(--space-1)}
-.row{border-top:1px solid var(--border);padding:var(--space-3) 0}.row:first-of-type{border-top:0;padding-top:0}
+.live{font-size:var(--text-xs);color:var(--muted-foreground);font-weight:400;margin-left:auto}
+.live::before{content:"";display:inline-block;width:8px;height:8px;border-radius:var(--radius-pill);background:var(--success);margin-right:var(--space-2)}
+.next{margin:0 0 var(--space-4);font-size:var(--text-sm);color:var(--muted-foreground)}
+.session{display:grid;grid-template-columns:5.5em 1fr auto;gap:var(--space-3);align-items:baseline;padding:var(--space-3) 0;border-top:1px solid var(--border);color:var(--foreground);text-decoration:none}
+.session:first-child{border-top:0;padding-top:0}
+.session:hover .title{color:var(--primary-deep)}
+.meta{font-family:var(--font-mono);font-size:var(--text-xs);color:var(--muted-foreground)}
+.empty{margin:0;color:var(--muted-foreground)}
 summary{cursor:pointer;list-style:none;display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:baseline}summary::-webkit-details-marker{display:none}
 summary::before{content:"+";font-family:var(--font-mono);color:var(--muted-foreground);width:1ch}details[open]>summary::before{content:"\\2212"}
-details .body{padding:var(--space-2) 0 0 calc(1ch + var(--space-2))}
-.meta{font-family:var(--font-mono);font-size:var(--text-xs);color:var(--muted-foreground)}
-.actions{display:flex;gap:var(--space-2);margin-top:var(--space-3);flex-wrap:wrap}
+.actions{display:flex;gap:var(--space-2);margin-top:var(--space-3);flex-wrap:wrap;align-items:center}
 form.inline{display:inline}
-.nowrap{white-space:nowrap}
 textarea.input{min-height:88px;resize:vertical}
+.step{padding:var(--space-4) 0;border-top:1px solid var(--border)}.step:first-child{border-top:0;padding-top:0}
+.step h3{display:flex;gap:var(--space-2);align-items:baseline}
+.approval{padding:var(--space-3) 0;border-top:1px solid var(--border)}.approval:first-of-type{border-top:0}
+.demo-row{display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:center;font-size:var(--text-sm);padding:var(--space-2) 0;border-top:1px solid var(--border)}
 .foot{display:flex;flex-wrap:wrap;gap:var(--space-4);align-items:center;font-family:var(--font-mono);font-size:var(--text-xs);color:var(--muted-foreground)}
-.foot .dot{width:8px;height:8px;border-radius:var(--radius-pill);background:var(--success);display:inline-block;margin-right:var(--space-2)}
-@media(max-width:620px){.frame > *{padding:var(--space-5)}.slab{padding:var(--space-6) var(--space-5)}.slab h1{font-size:var(--text-xl)}}
+@media(max-width:620px){.frame > *{padding:var(--space-5)}.slab{padding:var(--space-6) var(--space-5)}.slab h1{font-size:var(--text-xl)}.session{grid-template-columns:1fr}}
 `;
 
-function scheduleRows(items: FireItem[], tz: string): string {
-  if (items.length === 0) return `<p class="text-muted">発火予定はまだない。下のフォームから予定を足すと、1分以内にここに出る。</p>`;
-  return `<table class="table"><tr><th>発火</th><th>種類</th><th>予定</th><th>状態</th></tr>${items
-    .slice(0, 15)
-    .map(
-      (i) => `<tr><td class="mono nowrap">${esc(when(i.fireAt, tz))}</td><td><span class="chip">${i.kind === "automation" ? "定期の仕事" : `準備 ${i.prepDays}日前`}</span></td><td>${esc(i.title)}${
-        i.kind === "prep" ? `<div class="text-muted">締切 ${esc(when(i.occurrenceStart, tz))}</div>` : ""
-      }</td><td>${i.blocked ? `<span class="status-bad">発火しない</span><div class="text-muted">${esc(i.blocked)}</div>` : i.late ? `<span class="status-warn">遅れて登録</span>` : `<span class="status-ok">待機</span>`}</td></tr>`,
-    )
-    .join("")}</table>`;
-}
+const CLIENT = `
+const esc=(s)=>String(s??"").replace(/[&<>"']/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
+const when=(iso)=>iso?new Date(iso).toLocaleString("ja-JP",{timeZone:TZ,month:"numeric",day:"numeric",weekday:"short",hour:"2-digit",minute:"2-digit",second:"2-digit"}):"";
+// Cloud Run の timeout（5分）を過ぎても running なら、実行中に process が落ちた
+const STALE=10*60*1000;
+const running=(r)=>r.status==="running"&&Date.now()-Date.parse(r.startedAt)<STALE;
+const status=(r)=>r.status==="succeeded"?'<span class="status-ok">成功</span>':r.status==="failed"?'<span class="status-bad">失敗</span>':r.status==="skipped"?'<span class="status-warn">実行せず</span>':running(r)?'<span class="status-warn">実行中</span>':'<span class="status-bad">中断</span>';
+const kind=(r)=>r.kind==="automation"?"定期の仕事":"準備";
+const secs=(r)=>r.finishedAt?((Date.parse(r.finishedAt)-Date.parse(r.startedAt))/1000).toFixed(1)+"s":"";
+// タブが見えている間だけ読みに行く。fn が false を返したら止める
+function poll(fn,ms){let t,stop=false;const tick=async()=>{if(stop)return;if(!document.hidden){try{if(await fn()===false){stop=true;return}}catch(e){}}t=setTimeout(tick,ms)};tick();document.addEventListener("visibilitychange",()=>{if(!document.hidden&&!stop){clearTimeout(t);tick()}})}
+`;
 
-function runStatus(r: Run): string {
-  if (r.status === "succeeded") return `<span class="status-ok">成功</span>`;
-  if (r.status === "failed") return `<span class="status-bad">失敗</span>`;
-  if (r.status === "running") {
-    // Cloud Run の timeout（5分）を過ぎても running なら、実行中に process が落ちた
-    return Date.now() - Date.parse(r.startedAt) > 10 * 60 * 1000 ? `<span class="status-bad">中断</span>` : `<span class="status-warn">実行中</span>`;
-  }
-  return `<span class="status-warn">実行せず</span>`;
-}
-
-function runList(runs: Run[], tz: string): string {
-  if (runs.length === 0) return `<p class="text-muted">まだ実行していない。</p>`;
-  return runs
-    .map((r) => {
-      const ms = r.finishedAt ? Date.parse(r.finishedAt) - Date.parse(r.startedAt) : 0;
-      return `<details class="row"><summary>${runStatus(r)} <span class="chip">${r.kind === "automation" ? "定期" : "準備"}</span> ${esc(r.title)} <span class="text-muted">· ${esc(when(r.startedAt, tz))}${r.late ? " · 遅れて登録" : ""}${
-        r.toolCalls.length ? ` · tool ${r.toolCalls.length}回` : ""
-      }</span></summary><div class="body">
-${r.reason ? `<p class="${r.status === "failed" ? "status-bad" : "status-warn"}">${esc(r.reason)}</p>` : ""}
-${r.input ? `<span class="label">入力</span><pre class="code">${esc(r.input)}</pre>` : ""}
-${r.toolCalls.map((t) => `<span class="label">tool: <span class="mono">${esc(t.name)}</span></span><pre class="code">${esc(JSON.stringify(t.args))}\n→ ${esc(JSON.stringify(t.result, null, 1).slice(0, 1500))}</pre>`).join("")}
-${r.output ? `<span class="label">出力</span><pre class="code">${esc(r.output)}</pre>` : ""}
-<div class="meta">${esc(r.model ?? "")}${r.usage ? ` · tokens ${r.usage.totalTokens}` : ""}${ms ? ` · ${(ms / 1000).toFixed(1)}s` : ""} · run ${esc(r.id.slice(0, 8))}</div>
-</div></details>`;
-    })
-    .join("");
-}
-
-function approvalList(ws: Workspace, approvals: Approval[], tz: string): string {
-  if (approvals.length === 0) return `<p class="text-muted">承認待ちはない。agent が予定の追加を提案するとここに入る。</p>`;
-  return approvals
-    .map((a) => {
-      const op = a.operation;
-      const actions =
-        a.status === "pending"
-          ? `<div class="actions"><form class="inline" method="post" action="/w/${esc(ws.id)}/approvals/${esc(a.id)}/approve"><button class="btn btn-primary">承認して追加</button></form>
-<form class="inline" method="post" action="/w/${esc(ws.id)}/approvals/${esc(a.id)}/reject"><button class="btn btn-outline">却下</button></form></div>`
-          : `<div><span class="chip">${{ approved: "承認済み", rejected: "却下", failed: "失敗", pending: "" }[a.status]}</span>${a.error ? ` <span class="status-bad">${esc(a.error)}</span>` : ""}</div>`;
-      return `<div class="row"><div><b>記録用カレンダーに予定を追加</b> <span class="text-muted">· ${esc(when(a.createdAt, tz))}</span></div>
-<div>${esc(op.summary)} <span class="text-muted">(${esc(timeLabel(op.start, tz))})</span></div>${op.notes ? `<pre class="code">${esc(op.notes)}</pre>` : ""}${actions}</div>`;
-    })
-    .join("");
-}
-
-function demoEvents(ws: Workspace, events: { role: "automation" | "records"; e: CalendarEvent }[], tz: string): string {
-  if (events.length === 0) return `<p class="text-muted">デモで足した予定はない。</p>`;
-  return `<table class="table">${events
-    .map(
-      ({ role, e }) => `<tr><td><span class="chip">${role === "automation" ? "起動用" : "記録用"}</span></td><td>${esc(e.summary)}<div class="text-muted">${e.start ? esc(timeLabel(e.start, tz)) : ""}${e.recurrence ? " · 繰り返し" : ""} · ${esc(when(e.tags[DEMO_EXPIRES_TAG], tz))} に自動で消える</div></td><td><form class="inline" method="post" action="/w/${esc(ws.id)}/demo/events/${role}/${esc(e.id)}/delete"><button class="btn btn-outline">消す</button></form></td></tr>`,
-    )
-    .join("")}</table>`;
+function shell(ws: Workspace, title: string, slab: string, content: string, script: string): string {
+  return `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="${FONTS}">
+<style>${DESIGN}${PAGE}</style></head><body><div class="page-guides"></div><main>
+<header class="slab">${slab}</header>
+<div class="content">${content}
+<div class="dashed-rule"></div>
+<p class="foot"><span>Cloud Run + Cloud Scheduler + Firestore + Vertex AI (Gemini)</span><a href="https://github.com/wwwyo/agent-calendar">GitHub</a></p>
+</div></main>
+<script>const WS=${JSON.stringify(ws.id)};const TZ=${JSON.stringify(ws.timeZone)};${CLIENT}${script}</script></body></html>`;
 }
 
 function forms(ws: Workspace, today: string): string {
   return `<form method="post" action="/w/${esc(ws.id)}/demo/automation">
 <h3 class="text-heading">定期の仕事を置く <small class="text-muted">起動用カレンダー</small></h3>
 <label class="label" for="a-title">タイトル</label><input class="input" id="a-title" name="title" maxlength="${TITLE_MAX}" required value="今週の締切の確認">
-<label class="label" for="a-starts">開始</label><select class="input" id="a-starts" name="startsIn"><option value="1">1分後</option><option value="3" selected>3分後</option><option value="5">5分後</option><option value="10">10分後</option><option value="30">30分後</option></select>
+<label class="label" for="a-starts">開始</label><select class="input" id="a-starts" name="startsIn"><option value="1" selected>1分後</option><option value="3">3分後</option><option value="5">5分後</option><option value="10">10分後</option><option value="30">30分後</option></select>
 <label class="label" for="a-repeat">繰り返し</label><select class="input" id="a-repeat" name="repeat"><option value="none">なし</option><option value="daily3">毎日3回</option><option value="weekly3">毎週3回</option></select>
 <label class="label" for="a-prompt">agent への指示（payload の prompt、${DEMO_PROMPT_MAX}文字まで）</label><textarea class="input" id="a-prompt" name="prompt" maxlength="${DEMO_PROMPT_MAX}" required>記録用カレンダーの締切を確認して、今週やることを3つに絞って。足りない準備の予定があれば提案して。</textarea>
 <div class="actions"><button class="btn btn-primary">起動用カレンダーに書く</button></div>
@@ -141,41 +95,58 @@ function forms(ws: Workspace, today: string): string {
 </form>`;
 }
 
-export function renderWorkspace(input: {
-  ws: Workspace;
-  schedule?: Schedule;
-  runs: Run[];
-  approvals: Approval[];
-  demoEvents: { role: "automation" | "records"; e: CalendarEvent }[];
-  flash?: string;
-  today: string;
-  workspaces: Workspace[];
-}): string {
-  const { ws } = input;
-  const tz = ws.timeZone;
-  const pending = input.approvals.filter((a) => a.status === "pending");
-  const decided = input.approvals.filter((a) => a.status !== "pending").slice(0, 5);
-  return `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>agent-calendar</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="${FONTS}">
-<style>${DESIGN}${PAGE}</style></head><body><div class="page-guides"></div><main>
-<header class="slab"><span class="ws">workspace / ${esc(ws.label)}</span><h1 class="text-heading">agent-calendar</h1>
-<p>予定と締切を Google Calendar に書いておくと、agent（Gemini）がそれに合わせて準備と定期の仕事を自分で始める。副作用のある操作は承認待ちに入る。</p></header>
-<div class="content">
-${input.flash ? `<div class="flash">${esc(input.flash)}</div>` : ""}
+// セッション（agent の1回の実行）の一覧。数秒ごとに読み直す
+export function renderSessionsPage(ws: Workspace, today: string, flash?: string): string {
+  const slab = `<span class="ws">workspace / ${esc(ws.label)}</span><h1 class="text-heading">agent-calendar</h1>
+<p>予定と締切を Google Calendar に書いておくと、agent（Gemini）がそれに合わせて準備と定期の仕事を自分で始める。</p>`;
+  const content = `${flash ? `<div class="flash">${esc(flash)}</div>` : ""}
 <div class="frame tick cols-3 how"><div><h3 class="text-heading">起動用カレンダー</h3><p>繰り返し予定の notes 先頭に payload（prompt）を書く。作成者が allowlist にある予定だけが開始時刻に発火する。</p></div>
 <div><h3 class="text-heading">記録用カレンダー</h3><p>締切の notes に「準備: N日前」と書くと、期日の N 日前に準備が始まる。notes は信頼しないデータとして渡す。</p></div>
-<div><h3 class="text-heading">承認待ち</h3><p>agent はカレンダーに直接書けない。予定の追加は提案になり、人が承認したときだけ書かれる。</p></div></div>
-<div class="frame tick cols-2">
-<section><h2 class="text-heading">次の発火予定 <small>Cloud Scheduler が1分ごとに差分を取る（LLM は呼ばない）</small></h2>${scheduleRows(input.schedule?.items ?? [], tz)}</section>
-<section><h2 class="text-heading">承認待ち <small>${pending.length}件</small></h2>${approvalList(ws, pending.slice(0, 4), tz)}${pending.length > 4 ? `<p class="text-muted">ほか ${pending.length - 4} 件</p>` : ""}${decided.length ? `<h2 class="text-heading" style="margin-top:var(--space-6)">決定済み</h2>${approvalList(ws, decided.slice(0, 3), tz)}` : ""}</section>
-</div>
-<div class="frame tick"><section><h2 class="text-heading">実行記録 <small>入力・tool 呼び出し・出力</small> <a href="">更新</a></h2>${runList(input.runs, tz)}</section></div>
-<div class="frame tick"><section><h2 class="text-heading">試す <small>runner の service account がデモカレンダーに書く</small></h2>
-<p class="text-muted">期日まで N 日を切っていれば「遅れて登録」として1分以内に準備が始まる。誰でも書けるので、IP ごとと全体の1時間あたりの回数に上限がある。足した予定は一定時間後に自動で消える。</p></section>
-<div class="frame cols-2 even" style="border:0;padding:0">${forms(ws, input.today)}</div>
-<section><h2 class="text-heading">デモで足した予定</h2>${demoEvents(ws, input.demoEvents, tz)}</section></div>
-<div class="dashed-rule"></div>
-<p class="foot"><span><span class="dot"></span>Cloud Run + Cloud Scheduler + Firestore + Vertex AI (Gemini)</span><a href="https://github.com/wwwyo/agent-calendar">GitHub</a></p>
-</div>
-</main></body></html>`;
+<div><h3 class="text-heading">承認</h3><p>agent はカレンダーに直接書けない。予定の追加は提案になり、人が承認したときだけ書かれる。</p></div></div>
+<div class="frame tick"><section><h2 class="text-heading">セッション <small>agent の1回の実行。開くと入力・tool 呼び出し・出力を見られる</small><span class="live">3秒ごとに更新</span></h2>
+<p class="next" id="next"></p><div id="list"><p class="empty">読み込み中。</p></div></section></div>
+<div class="frame tick"><section><details><summary><h2 class="text-heading" style="margin:0">試す <small>runner の service account がデモカレンダーに書く</small></h2></summary>
+<p class="text-muted">期日まで N 日を切っていれば「遅れて登録」として1分以内に準備が始まる。誰でも書けるので、IP ごとと全体の1時間あたりの回数に上限がある。足した予定は一定時間後に自動で消える。</p>
+<div class="frame cols-2" style="margin-top:var(--space-4)">${forms(ws, today)}</div>
+<div id="demo" style="margin-top:var(--space-4)"></div></details></section></div>`;
+  const script = `
+poll(async()=>{
+  const r=await fetch("/w/"+WS+"/api/sessions");if(!r.ok)return;const d=await r.json();
+  document.getElementById("next").innerHTML=d.next.length?"次の発火: "+d.next.map((n)=>'<span class="mono">'+esc(when(n.fireAt))+'</span> '+esc(n.title)+(n.blocked?' <span class="status-bad">発火しない（'+esc(n.blocked)+'）</span>':"")).join(" · "):"";
+  document.getElementById("demo").innerHTML=d.demoEvents.length?'<h3 class="text-heading">デモで足した予定</h3>'+d.demoEvents.map((e)=>'<div class="demo-row"><span class="chip">'+(e.role==="automation"?"起動用":"記録用")+'</span>'+esc(e.title)+'<span class="text-muted">'+esc(when(e.expiresAt))+' に自動で消える</span><form class="inline" method="post" action="/w/'+WS+'/demo/events/'+e.role+'/'+encodeURIComponent(e.id)+'/delete"><button class="btn btn-outline">消す</button></form></div>').join(""):"";
+  document.getElementById("list").innerHTML=d.sessions.length?d.sessions.map((s)=>'<a class="session" href="/w/'+WS+'/sessions/'+encodeURIComponent(s.id)+'"><span>'+status(s)+'</span><span><span class="title">'+esc(s.title)+'</span><div class="meta"><span class="chip">'+kind(s)+'</span> '+esc(when(s.startedAt))+(s.late?" · 遅れて登録":"")+(s.toolCalls?" · tool "+s.toolCalls:"")+(s.pendingApprovals?' · <span class="status-warn">承認待ち '+s.pendingApprovals+'</span>':"")+'</div></span><span class="meta">'+esc(secs(s))+'</span></a>').join(""):'<p class="empty">セッションはまだない。「試す」から予定を足すと、1分ほどでここに出る。</p>';
+},3000);`;
+  return shell(ws, "agent-calendar", slab, content, script);
+}
+
+// セッション詳細。実行中のあいだだけ実行ログを読み直す（承認・却下はページ遷移で反映する）
+export function renderSessionPage(ws: Workspace, id: string, flash?: string): string {
+  const slab = `<span class="ws"><a href="/w/${esc(ws.id)}">← セッション一覧</a> / ${esc(ws.label)}</span><h1 class="text-heading" id="title">読み込み中</h1>`;
+  const content = `${flash ? `<div class="flash">${esc(flash)}</div>` : ""}
+<div class="frame tick"><section><h2 class="text-heading"><span id="st"></span> <small id="kind"></small></h2><div class="meta" id="meta"></div></section></div>
+<div class="frame tick"><section><h2 class="text-heading">実行ログ <small>入力・tool 呼び出し・出力。実行中は2秒ごとに更新</small></h2><div id="log"></div></section></div>
+<div class="frame tick" id="approvals-frame" hidden><section><h2 class="text-heading">承認待ち <small>agent の提案。人が承認したときだけ記録用カレンダーに書く</small></h2><div id="approvals"></div></section></div>`;
+  const script = `
+const ID=${JSON.stringify(id)};
+const block=(s)=>'<pre class="code">'+esc(s)+'</pre>';
+poll(async()=>{
+  const r=await fetch("/w/"+WS+"/api/sessions/"+encodeURIComponent(ID));
+  if(r.status===404){document.getElementById("title").textContent="セッションが見つからない";return false}
+  const {session:s,approvals}=await r.json();
+  document.getElementById("title").textContent=s.title;
+  document.getElementById("st").innerHTML=status(s);
+  document.getElementById("kind").textContent=kind(s)+(s.late?" · 遅れて登録":"");
+  document.getElementById("meta").textContent=[when(s.startedAt),s.model,s.usage?"tokens "+s.usage.totalTokens:"",secs(s),"run "+s.id.slice(0,8)].filter(Boolean).join(" · ");
+  const steps=[];
+  if(s.input)steps.push('<div class="step"><h3 class="text-heading">入力</h3>'+block(s.input)+'</div>');
+  for(const t of s.toolCalls)steps.push('<div class="step"><h3 class="text-heading">tool <span class="mono">'+esc(t.name)+'</span></h3>'+block(JSON.stringify(t.args,null,1))+block("→ "+JSON.stringify(t.result,null,1))+'</div>');
+  if(s.reason)steps.push('<div class="step"><h3 class="text-heading '+(s.status==="failed"?"status-bad":"status-warn")+'">'+(s.status==="failed"?"失敗":"実行しなかった理由")+'</h3><p>'+esc(s.reason)+'</p></div>');
+  if(s.output)steps.push('<div class="step"><h3 class="text-heading">出力</h3>'+block(s.output)+'</div>');
+  if(running(s))steps.push('<div class="step"><h3 class="text-heading status-warn">実行中</h3></div>');
+  document.getElementById("log").innerHTML=steps.join("");
+  document.getElementById("approvals-frame").hidden=!approvals.length;
+  document.getElementById("approvals").innerHTML=approvals.map((a)=>'<div class="approval"><b>'+esc(a.operation.summary)+'</b> <span class="mono">'+esc(a.operation.start.date||when(a.operation.start.dateTime))+'</span>'+(a.operation.notes?'<p class="text-muted">'+esc(a.operation.notes)+'</p>':"")+'<div class="actions">'+(a.status==="pending"?'<form class="inline" method="post" action="/w/'+WS+'/approvals/'+encodeURIComponent(a.id)+'/approve"><button class="btn btn-primary">承認して追加</button></form><form class="inline" method="post" action="/w/'+WS+'/approvals/'+encodeURIComponent(a.id)+'/reject"><button class="btn btn-outline">却下</button></form>':'<span class="chip">'+({approved:"承認済み",rejected:"却下",failed:"失敗"})[a.status]+'</span>')+'</div></div>').join("");
+  return running(s)?undefined:false;
+},2000);`;
+  return shell(ws, "agent-calendar · session", slab, content, script);
 }

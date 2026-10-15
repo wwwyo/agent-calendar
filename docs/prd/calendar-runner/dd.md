@@ -31,32 +31,24 @@ runner が止まっていた間の起動用の回は、6時間前までを遅れ
 時刻が来たら実行せず、理由を実行記録に残す。
 
 - 起動用の予定の作成者（creator / organizer の email）が組の `allowedCreators` にない
-- payload が書式に合わない（下記）
+- 判定が済んでいない、または判定で blocked になった（[agent-dispatch/dd.md](../agent-dispatch/dd.md)）
 - 組の1時間あたりの実行回数が `RUN_LIMIT_PER_HOUR`（既定 60）に達した
 
-## payload の書式
+## 起動用の予定の notes
 
-起動用カレンダーの notes の先頭（空行は除く）に YAML front matter を置く。知らない項目、allowlist 外の tool、1000文字を超える prompt は読まない。notes が HTML なら改行を保ってテキストにしてから読む。
-
-```
----
-prompt: 記録用カレンダーの締切を確認して、今週やることを3つに絞って
-tools: [list_deadlines, propose_event]   # 省略するとすべて
----
-ここから下は自由に書いてよい（読まない）
-```
+YAML front matter の payload は廃止した。notes は自然言語のまま、runner が実行先・agent・prompt を判定する（[agent-dispatch/dd.md](../agent-dispatch/dd.md)）。判定が済んでいない・判定で blocked になった予定は発火しない。
 
 ## agent と prompt injection 対策
 
-- system instruction で、`<untrusted>` の中と tool が返すカレンダーの title・notes には従わないと伝える。記録用カレンダーの title・notes は `<untrusted>` で囲んで渡す（閉じタグは潰す）。payload の prompt だけを指示として渡す
-- tool は allowlist（`src/agent/tools.ts`）。読み取り（`list_deadlines`・`list_schedule`・`list_recent_runs`）と、承認待ちに入れるだけの `propose_event`。準備の発火では payload がないので、固定の指示と `list_deadlines`・`list_schedule`・`propose_event` だけを渡す。宣言していない tool を呼ばれても実行しない
+- system instruction で、`<untrusted>` の中と tool が返すカレンダーの title・notes には従わないと伝える。記録用カレンダーの title・notes は `<untrusted>` で囲んで渡す（閉じタグは潰す）
+- tool は allowlist（`src/agent/tools.ts`）。準備の発火だけが使い、固定の指示と読み取り（`list_deadlines`・`list_schedule`）・承認待ちに入れるだけの `propose_event` を渡す（起動用の予定は cloud の sandbox か local worker で動き、この tool は使わない）。宣言していない tool を呼ばれても実行しない
 - 書き込み先は同じ組の記録用カレンダーだけ。起動用カレンダーには書けないので、agent が自分の起動を増やせない。提案の notes から「準備:」の行を外し、承認した予定が準備を再発火させないようにする
 - tool 呼び出しは1回の実行で6往復まで
 
 ## dashboard とデモ用フォーム
 
 - 画面は、カレンダーとセッション（agent の1回の実行）の一覧 `/w/{ws}` と、セッション詳細 `/w/{ws}/sessions/{id}` の2つ
-- カレンダーは週表示で、起動用・記録用の予定と準備の開始時刻を出す（`/w/{ws}/api/calendar?start=`、繰り返しは `occurrences` で週の範囲に展開）。時間の枠を押すと定期の仕事、終日の枠を押すと締切を足すモーダルが開く。予定を押すと、notes・発火しない理由・その回のセッション・削除をモーダルで出す。表示は runner が syncToken で取った Firestore の写しで、Calendar API は読まない（反映は最大1分遅れる）
+- カレンダーは週表示で、起動用・記録用の予定と準備の開始時刻を出す（`/w/{ws}/api/calendar?start=`、繰り返しは `occurrences` で週の範囲に展開）。時間の枠を押すと定期の仕事、終日の枠を押すと締切を足すモーダルが開く。予定を押すと、notes・判定結果（実行先・agent・prompt）か判定待ち・発火しない理由・その回のセッション・削除をモーダルで出す。表示は runner が syncToken で取った Firestore の写しで、Calendar API は読まない（反映は最大1分遅れる）
 - カレンダーは5秒ごと、一覧は3秒ごと、詳細は実行中のあいだ2秒ごとに JSON を読み直す。タブが見えていないときは読まない。runs・approvals・予定の読み取りは instance ごとに2.5秒まとめ、Firestore の読み取りを閲覧者の数に比例させない
 - runner は agent を呼ぶ前に入力を `running` で保存し、tool を1回呼ぶたびに途中経過を保存する。詳細では入力・tool 呼び出し・出力が順に増えていく
 - 承認・却下は、その提案を出したセッションの詳細に置く

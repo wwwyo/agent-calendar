@@ -126,7 +126,7 @@ body {
   font-feature-settings: "palt";
   word-break: keep-all;
 }
-/* mono は機械の出力専用: payload・tool 引数と結果・run id・tokens・時刻の生値 */
+/* mono は機械の出力専用: 判定の prompt・tool 引数と結果・run id・tokens・時刻の生値 */
 .mono { font-family: var(--font-mono); font-size: var(--text-sm); letter-spacing: 0; }
 
 /* 背景の足場: gutter の点と、本文カラム端の dashed guide。z-index:-1 で内容の後ろ */

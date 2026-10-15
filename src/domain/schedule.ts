@@ -47,11 +47,14 @@ function singles<T extends CalendarEvent>(events: T[]): T[] {
   return events.filter((e) => e.status !== "cancelled");
 }
 
+// 足された・変わった予定が判定を待っている間の理由。dashboard は「発火しない」と分けて「判定待ち」と出す
+export const NOT_JUDGED = "判定がまだ済んでいない";
+
 // 予定を発火させない理由。作成者・判定の順に見る
 export function automationBlocked(e: StoredEvent, ws: Workspace): string | undefined {
   if (!isAllowedCreator(e, ws)) return `作成者 ${e.creatorEmail ?? "(不明)"} が allowlist にない`;
   const d = e.dispatch;
-  if (!d || d.eventUpdated !== (e.updated ?? "")) return "判定がまだ済んでいない";
+  if (!d || d.eventUpdated !== (e.updated ?? "")) return NOT_JUDGED;
   if (d.status === "blocked") return d.reason;
   return undefined;
 }

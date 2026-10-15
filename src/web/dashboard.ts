@@ -14,6 +14,7 @@ const HOUR_PX = 40;
 
 const PAGE = `
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 body{font-family:var(--font-sans);font-size:var(--text-base);line-height:var(--line-height-body);letter-spacing:var(--letter-spacing-body);line-break:strict;overflow-wrap:break-word}
 a{color:var(--primary-deep)}
 main{max-width:calc(var(--max-width) + 16px);margin:0 auto;padding:var(--space-2) var(--space-2) var(--space-8)}
@@ -41,6 +42,9 @@ form.inline{display:inline}
 textarea.input{min-height:88px;resize:vertical}
 .step{padding:var(--space-4) 0;border-top:1px solid var(--border)}.step:first-child{border-top:0;padding-top:0}
 .step h3{display:flex;gap:var(--space-2);align-items:baseline}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:var(--space-1) var(--space-4);margin:0 0 var(--space-3)}
+.kv dt{font-size:var(--text-sm);color:var(--muted-foreground)}
+.kv dd{margin:0}
 .approval{padding:var(--space-3) 0;border-top:1px solid var(--border)}.approval:first-of-type{border-top:0}
 .cal-bar{display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:center;margin-bottom:var(--space-4)}
 .cal-bar h2{margin:0 var(--space-2) 0 0}
@@ -93,6 +97,9 @@ const STALE=10*60*1000;
 const running=(r)=>r.status==="running"&&Date.now()<(r.deadlineAt?Date.parse(r.deadlineAt):Date.parse(r.startedAt)+STALE);
 const status=(r)=>r.status==="succeeded"?'<span class="status-ok">成功</span>':r.status==="failed"?'<span class="status-bad">失敗</span>':r.status==="skipped"?'<span class="status-warn">実行せず</span>':r.status==="queued"?'<span class="status-warn">待機中</span>':running(r)?'<span class="status-warn">実行中</span>':'<span class="status-bad">中断</span>';
 const kind=(r)=>r.kind==="automation"?"定期の仕事":"準備";
+// 判定の結果（実行先・agent・target・prompt）。カレンダーの予定とセッションで同じ形に出す
+const EXEC={cloud:"cloud（使い捨ての sandbox）",local:"local（本人の Mac）"};
+const judgment=(d)=>'<dl class="kv"><dt>実行先</dt><dd>'+esc(EXEC[d.executor]??d.executor)+'</dd><dt>agent</dt><dd>'+esc(d.agent)+'</dd>'+(d.target?'<dt>target</dt><dd>'+esc(d.target)+'</dd>':"")+'</dl>'+(d.prompt?'<span class="label">agent に渡す prompt</span><pre class="code">'+esc(d.prompt)+'</pre>':"");
 // 実行先と agent（判定で回した回だけ）
 const where=(r)=>r.executor?[r.executor,r.agent,r.target].filter(Boolean).join(" · "):"";
 const secs=(r)=>r.finishedAt?((Date.parse(r.finishedAt)-Date.parse(r.startedAt))/1000).toFixed(1)+"s":"";
@@ -170,7 +177,7 @@ function skeleton(){
 }
 function block(it,i){
   const s=it.sessions[0];
-  return '<button type="button" class="ev ev-'+it.role+'" data-i="'+i+'">'+(it.date?"":'<span class="mono">'+wall(it.start).hm+'</span> ')+esc(it.title)+(it.blocked?' <span class="status-bad">発火しない</span>':s?" "+status(s):"")+'</button>';
+  return '<button type="button" class="ev ev-'+it.role+'" data-i="'+i+'">'+(it.date?"":'<span class="mono">'+wall(it.start).hm+'</span> ')+esc(it.title)+(it.blocked?' <span class="status-bad">発火しない</span>':it.judging&&!s?' <span class="status-warn">判定待ち</span>':s?" "+status(s):"")+'</button>';
 }
 function render(){
   const cells=Object.fromEntries([...document.querySelectorAll(".cal-cell,.cal-col")].map((e)=>[e.className.split(" ")[0]+e.dataset.date,{el:e,html:[]}]));
@@ -238,7 +245,7 @@ document.querySelector(".cal").addEventListener("click",(e)=>{
   document.getElementById("ev-body").innerHTML='<h2 class="text-heading" id="ev-h">'+esc(it.title)+'</h2>'
     +'<p class="meta"><span class="chip">'+ROLE[it.role]+'</span> '+esc(time)+(it.recurring?" · 繰り返し":"")+'</p>'
     +(it.blocked?'<p class="status-bad">発火しない（'+esc(it.blocked)+'）</p>':"")
-    +(it.dispatch?'<h3 class="text-heading">判定</h3><p class="meta"><span class="chip">'+esc(it.dispatch.executor)+'</span> '+esc([it.dispatch.agent,it.dispatch.target].filter(Boolean).join(" · "))+'</p><pre class="code">'+esc(it.dispatch.prompt)+'</pre>':"")
+    +(it.judging?'<h3 class="text-heading">判定</h3><p class="status-warn">判定待ち。1分ほどで実行先・agent・prompt がここに出る。</p>':it.dispatch?'<h3 class="text-heading">判定</h3>'+judgment(it.dispatch):"")
     +(it.sessions.length?'<h3 class="text-heading">セッション</h3>'+it.sessions.map((s)=>'<a class="ev-session" href="/w/'+WS+'/sessions/'+encodeURIComponent(s.id)+'">'+status(s)+'<span class="meta">'+esc(when(s.startedAt))+'</span><span>開く →</span></a>').join(""):"")
     +(it.notes?'<h3 class="text-heading">notes</h3><pre class="code">'+esc(it.notes)+'</pre>':"")
     +'<div class="actions">'+(it.deletable?'<form class="inline" method="post" action="/w/'+WS+'/demo/events/'+role+'/'+encodeURIComponent(it.id)+'/delete#'+week+'"><button class="btn btn-outline">'+(it.role==="prep"?"締切ごと消す":it.recurring?"繰り返しごと消す":"消す")+'</button></form>':'<span class="text-muted">デモで足した予定だけ消せる。</span>')
@@ -275,17 +282,19 @@ poll(async()=>{
   document.getElementById("title").textContent=s.title;
   document.getElementById("st").innerHTML=status(s);
   document.getElementById("kind").textContent=kind(s)+(s.late?" · 遅れて登録":"");
-  document.getElementById("meta").textContent=[when(s.startedAt),where(s),s.workerId?"worker "+s.workerId:"",s.model,s.usage?"tokens "+s.usage.totalTokens:"",secs(s),"run "+s.id.slice(0,8)].filter(Boolean).join(" · ");
+  document.getElementById("meta").textContent=[when(s.startedAt),where(s),s.execution?"execution "+s.execution.split("/").pop():"",s.workerId?"worker "+s.workerId:"",s.model,s.usage?"tokens "+s.usage.totalTokens:"",secs(s),"run "+s.id.slice(0,8)].filter(Boolean).join(" · ");
   const steps=[];
-  if(s.input)steps.push('<div class="step"><h3 class="text-heading">'+(s.executor?"prompt":"入力")+'</h3>'+block(s.input)+'</div>');
+  if(s.executor)steps.push('<div class="step"><h3 class="text-heading">判定</h3>'+judgment({executor:s.executor,agent:s.agent,target:s.target,prompt:s.input})+'</div>');
+  else if(s.input)steps.push('<div class="step"><h3 class="text-heading">入力</h3>'+block(s.input)+'</div>');
   for(const t of s.toolCalls)steps.push('<div class="step"><h3 class="text-heading">tool <span class="mono">'+esc(t.name)+'</span></h3>'+block(JSON.stringify(t.args,null,1))+block("→ "+JSON.stringify(t.result,null,1))+'</div>');
   if(s.reason)steps.push('<div class="step"><h3 class="text-heading '+(s.status==="failed"?"status-bad":"status-warn")+'">'+(s.status==="failed"?"失敗":"実行しなかった理由")+'</h3><p>'+esc(s.reason)+'</p></div>');
   if(s.output)steps.push('<div class="step"><h3 class="text-heading">出力</h3>'+block(s.output)+'</div>');
-  if(running(s))steps.push('<div class="step"><h3 class="text-heading status-warn">実行中</h3></div>');
+  if(running(s))steps.push('<div class="step"><h3 class="text-heading status-warn">実行中</h3>'+(s.executor==="cloud"?'<p>cloud の sandbox で agent が動いている。終わると出力がここに出る。</p>':"")+'</div>');
   if(s.status==="queued")steps.push('<div class="step"><h3 class="text-heading status-warn">待機中</h3><p>local worker が受け取るのを待っている。</p></div>');
   document.getElementById("log").innerHTML=steps.join("");
   document.getElementById("approvals-frame").hidden=!approvals.length;
-  document.getElementById("approvals").innerHTML=approvals.map((a)=>'<div class="approval"><b>'+esc(a.operation.summary)+'</b> <span class="mono">'+esc(a.operation.start.date||when(a.operation.start.dateTime))+'</span>'+(a.operation.notes?'<p class="text-muted">'+esc(a.operation.notes)+'</p>':"")+'<div class="actions">'+(a.status==="pending"?'<form class="inline" method="post" action="/w/'+WS+'/approvals/'+encodeURIComponent(a.id)+'/approve"><button class="btn btn-primary">承認して追加</button></form><form class="inline" method="post" action="/w/'+WS+'/approvals/'+encodeURIComponent(a.id)+'/reject"><button class="btn btn-outline">却下</button></form>':'<span class="chip">'+({approved:"承認済み",rejected:"却下",failed:"失敗"})[a.status]+'</span>')+'</div></div>').join("");
+  const at=(a)=>a.operation.start.date||a.operation.start.dateTime||"";
+  document.getElementById("approvals").innerHTML=[...approvals].sort((a,b)=>at(a).localeCompare(at(b))).map((a)=>'<div class="approval"><b>'+esc(a.operation.summary)+'</b> <span class="mono">'+esc(a.operation.start.date||when(a.operation.start.dateTime))+'</span>'+(a.operation.notes?'<p class="text-muted">'+esc(a.operation.notes)+'</p>':"")+'<div class="actions">'+(a.status==="pending"?'<form class="inline" method="post" action="/w/'+WS+'/approvals/'+encodeURIComponent(a.id)+'/approve"><button class="btn btn-primary">承認して追加</button></form><form class="inline" method="post" action="/w/'+WS+'/approvals/'+encodeURIComponent(a.id)+'/reject"><button class="btn btn-outline">却下</button></form>':'<span class="chip">'+({approved:"承認済み",rejected:"却下",failed:"失敗"})[a.status]+'</span>')+'</div></div>').join("");
   return running(s)||s.status==="queued"?undefined:false;
 },2000);`;
   return shell(ws, "agent-calendar · session", slab, content, script);

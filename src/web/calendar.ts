@@ -1,7 +1,7 @@
 import type { CalendarEvent } from "../calendar/adapter";
 import type { Workspace } from "../config";
 import type { ReadyDispatch, StoredEvent } from "../dispatch/types";
-import { automationBlocked, computeSchedule, exceptionsByMaster } from "../domain/schedule";
+import { automationBlocked, computeSchedule, exceptionsByMaster, NOT_JUDGED } from "../domain/schedule";
 import { DAY, eventTz, fromWall, isAllDay, occurrences, toWall } from "../domain/time";
 import { DEMO_EXPIRES_TAG } from "../runner";
 import type { Run } from "../store/store";
@@ -21,6 +21,8 @@ export type CalendarItem = {
   deletable: boolean;
   expiresAt?: string;
   blocked?: string;
+  // 起動用の予定が判定を待っている（足した直後・変えた直後）。発火しないとは出さない
+  judging?: boolean;
   // 起動用の予定の判定結果。発火の前に実行先・agent・target・prompt を確かめられるようにする
   dispatch?: Omit<ReadyDispatch, "status">;
   sessions: { id: string; status: Run["status"]; startedAt: string }[];
@@ -37,8 +39,10 @@ export function calendarItems(input: { ws: Workspace; automation: StoredEvent[];
     const ex = exceptionsByMaster(events, ws.timeZone);
     for (const e of events as StoredEvent[]) {
       if (e.status === "cancelled" || !e.start) continue;
-      const blocked = role === "automation" ? automationBlocked(e, ws) : undefined;
-      const d = !blocked && e.dispatch?.status === "ready" ? e.dispatch : undefined;
+      const reason = role === "automation" ? automationBlocked(e, ws) : undefined;
+      const judging = reason === NOT_JUDGED;
+      const blocked = judging ? undefined : reason;
+      const d = !reason && e.dispatch?.status === "ready" ? e.dispatch : undefined;
       const dispatch = d ? { executor: d.executor, agent: d.agent, ...(d.target ? { target: d.target } : {}), prompt: d.prompt } : undefined;
       const allDay = isAllDay(e.start);
       // 終了が読めない予定は30分として描く
@@ -58,6 +62,7 @@ export function calendarItems(input: { ws: Workspace; automation: StoredEvent[];
           deletable: !!e.tags[DEMO_EXPIRES_TAG],
           expiresAt: e.tags[DEMO_EXPIRES_TAG],
           blocked,
+          ...(judging ? { judging } : {}),
           dispatch,
           sessions: role === "automation" ? runsOf((r) => r.kind === "automation" && r.eventId === e.id && r.scheduledAt === iso) : runsOf((r) => r.kind === "prep" && r.eventId === e.id),
         });

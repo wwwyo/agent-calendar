@@ -33,6 +33,16 @@ class FakeRuns implements RunAccess {
   async saveRun(ws: string, run: Run) {
     this.runs.set(`${ws}/${run.id}`, run);
   }
+  // getRun と updateRunIf の間に割り込む書き込み（tick が期限切れで閉じるなど）
+  beforeUpdate?: () => Promise<void>;
+  async updateRunIf(ws: string, id: string, expected: Run["status"], patch: Partial<Run>) {
+    await this.beforeUpdate?.();
+    const r = this.runs.get(`${ws}/${id}`);
+    if (!r || r.status !== expected) return undefined;
+    const next = { ...r, ...patch };
+    this.runs.set(`${ws}/${id}`, next);
+    return next;
+  }
 }
 
 function runningRun(id: string): Run {
@@ -231,6 +241,14 @@ describe("/sandbox/result", () => {
     await s.runs.saveRun("me", { ...runningRun("r1"), status: "failed", reason: "sandbox から結果が返らなかった" });
     expect((await s.handle(resultReq(token)))!.status).toBe(409);
     expect((await s.runs.getRun("me", "r1"))!.reason).toBe("sandbox から結果が返らなかった");
+  });
+
+  test("読んだ後に tick が閉じた Run は上書きしない", async () => {
+    const s = setup();
+    const { token } = await launch(s);
+    s.runs.beforeUpdate = () => s.runs.saveRun("me", { ...runningRun("r1"), status: "failed", reason: "sandbox から結果が返らなかった" });
+    expect((await s.handle(resultReq(token, { status: "succeeded", output: "late" })))!.status).toBe(409);
+    expect((await s.runs.getRun("me", "r1"))!).toMatchObject({ status: "failed", reason: "sandbox から結果が返らなかった" });
   });
 
   test("tick が失効させた token は受けない", async () => {

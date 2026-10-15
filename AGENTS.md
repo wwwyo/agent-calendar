@@ -23,7 +23,7 @@ agent-calendar/
 
 - カレンダーは3種類に分ける: 本人の予定（メイン）、締切・手続きの期日（記録用）、agent の定期実行（起動用）。記録用には起動の指示を書かない。起動の正本は起動用カレンダー
 - 発火の検出は範囲で切らない。未来の予定は全件持ち、差分は syncToken で取る
-- カレンダーの notes は信頼しない入力として扱う（prompt injection 対策）。payload を解釈するのは起動用カレンダーの予定だけ
+- カレンダーの notes は信頼しない入力として扱う（prompt injection 対策）。notes を agent への指示として判定（実行先・agent・prompt を自然言語から決める）にかけるのは、起動用カレンダーの予定で作成者が allowlist にあるものだけ。記録用の notes は `<untrusted>` で囲んで渡すデータ
 - 背景と却下した案は wwwyo/me の `ideas/agent-calendar.md`
 
 ## セットアップ

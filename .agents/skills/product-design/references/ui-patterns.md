@@ -30,7 +30,7 @@
 ## 文字
 
 - 見出しは `.text-heading`（weight 500・`palt`）。600 / 700 にしない。太字は「行の主語」（承認待ちの操作名など）の `<b>` だけ
-- mono（`.mono` / `.code`）は機械の出力専用: payload、tool の引数と結果、agent の出力、run id、tokens、発火時刻の表。説明文・label・状態名に mono を使わない
+- mono（`.mono` / `.code`）は機械の出力専用: agent に渡す prompt、tool の引数と結果、agent の出力、run id、tokens、発火時刻の表。説明文・label・状態名に mono を使わない
 - 日時の列は `nowrap` で1行に保つ
 
 ## 操作

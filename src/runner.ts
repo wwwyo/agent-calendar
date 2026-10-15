@@ -1,7 +1,7 @@
 import type { GoogleGenAI } from "@google/genai";
 import type { CalendarAdapter, CalendarEvent } from "./calendar/adapter";
 import type { Config, Workspace } from "./config";
-import { computeSchedule, isAllowedCreator, type FireItem } from "./domain/schedule";
+import { computeSchedule, isAllowedCreator, NOT_JUDGED, type FireItem } from "./domain/schedule";
 import { buildTask, runAgent } from "./agent/agent";
 import { judgeEvent, needsJudge } from "./dispatch/judge";
 import {
@@ -105,7 +105,8 @@ async function judgePending(deps: Deps, ws: Workspace, now: number): Promise<{ j
   if (pending.length === 0) return { judged: 0, remaining: false };
   const choices = await dispatchChoices(deps, ws);
   const batch = pending.slice(0, JUDGE_PER_TICK);
-  for (const e of batch) await judgeOne(deps, ws, e, choices, now);
+  // 並べて呼ぶ。直列だと 1 件数秒ずつ tick が延び、同じ tick の発火が遅れる
+  await Promise.all(batch.map((e) => judgeOne(deps, ws, e, choices, now)));
   return { judged: batch.length, remaining: pending.length > batch.length };
 }
 
@@ -131,7 +132,8 @@ async function fire(deps: Deps, ws: Workspace, item: FireItem, now: number): Pro
     title: item.title,
     eventId: item.eventId,
     scheduledAt: item.fireAt,
-    startedAt: new Date(now).toISOString(),
+    // tick の開始ではなく発火した時刻。同じ tick の判定にかかった時間を所要時間に含めない
+    startedAt: new Date((deps.now ?? Date.now)()).toISOString(),
     status: "skipped",
     late: item.late,
     toolCalls: [],
@@ -182,7 +184,7 @@ async function dispatchRun(deps: Deps, ws: Workspace, item: FireItem, base: Run,
   const d = item.dispatch;
   const finished = (status: Run["status"], reason: string): Run => ({ ...base, status, reason, finishedAt: base.startedAt });
   if (!d) {
-    const run = finished("skipped", "判定がまだ済んでいない");
+    const run = finished("skipped", NOT_JUDGED);
     await deps.store.saveRun(ws.id, run);
     return run;
   }

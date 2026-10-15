@@ -161,7 +161,12 @@ export function createSandboxHandler(deps: SandboxHandlerDeps): SandboxHandler {
       return json(409, { error: "この Run は結果を受け取れる状態でない" });
     }
     const { status, output, reason } = parsed.data;
-    await deps.runs.saveRun(workspace, { ...run, status, output, ...(reason ? { reason } : {}), finishedAt: new Date(at).toISOString() });
+    // getRun の後に tick が期限切れで閉じても上書きしないよう、running のときだけ書く
+    const saved = await deps.runs.updateRunIf(workspace, runId, "running", { status, output, ...(reason ? { reason } : {}), finishedAt: new Date(at).toISOString() });
+    if (!saved) {
+      log("warn", "sandbox result discarded", { workspace, runId, status: "closed while saving" });
+      return json(409, { error: "この Run は結果を受け取れる状態でない" });
+    }
     log("info", "sandbox result saved", { workspace, runId, status });
     return json(200, { ok: true });
   }

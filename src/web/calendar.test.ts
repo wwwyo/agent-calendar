@@ -59,6 +59,27 @@ describe("calendarItems", () => {
   });
 });
 
+describe("calendarItems の判定待ち", () => {
+  test("判定がまだの予定と変えた後の予定は判定待ちにし、発火しないとは出さない。失敗は理由を出す", () => {
+    const { from, to } = weekRange("2026-10-12", ws, now)!;
+    const start = { dateTime: "2026-10-16T09:00:00+09:00" };
+    const failed: JudgedDispatch = { status: "blocked", reason: "判定に失敗した（timeout）", eventUpdated: "u1", judgedAt: "x", model: "fake", retryAt: "y" };
+    const items = calendarItems({
+      ws,
+      now,
+      from,
+      to,
+      runs: [],
+      automation: [ev({ id: "new", start }), ev({ id: "edited", start, updated: "u2", dispatch: local }), ev({ id: "failed", start, dispatch: failed })],
+      records: [],
+    });
+    const by = (id: string) => items.find((i) => i.id === id)!;
+    expect([by("new").judging, by("new").blocked, by("new").dispatch]).toEqual([true, undefined, undefined]);
+    expect([by("edited").judging, by("edited").dispatch]).toEqual([true, undefined]);
+    expect([by("failed").judging, by("failed").blocked]).toEqual([undefined, "判定に失敗した（timeout）"]);
+  });
+});
+
 describe("calendarItems の準備の開始と壊れた終了", () => {
   test("準備の開始にその回のセッションと繰り返しを付け、終了が読めない予定は30分で描く", () => {
     const { from, to } = weekRange("2026-10-12", ws, now)!;

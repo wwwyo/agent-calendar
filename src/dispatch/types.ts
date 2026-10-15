@@ -208,4 +208,6 @@ export interface CloudLauncher {
 export interface RunAccess {
   getRun(ws: string, id: string): Promise<Run | undefined>;
   saveRun(ws: string, run: Run): Promise<void>;
+  // status が expected のときだけ patch を当てる（transaction）。当てなければ undefined
+  updateRunIf(ws: string, id: string, expected: Run["status"], patch: Partial<Run>): Promise<Run | undefined>;
 }

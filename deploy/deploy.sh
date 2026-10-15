@@ -41,6 +41,14 @@ if ! gcloud iam service-accounts describe "$SANDBOX_SA" --project "$PROJECT" >/d
   gcloud iam service-accounts create sandbox --project "$PROJECT" \
     --display-name "agent-calendar sandbox (no roles)" --quiet
 fi
+# 既にある sandbox@ に project の role が付いていたら止める（「sandbox は権限を持たない」が崩れている）
+SANDBOX_ROLES=$(gcloud projects get-iam-policy "$PROJECT" --flatten 'bindings[].members' \
+  --filter "bindings.members=serviceAccount:${SANDBOX_SA}" --format 'value(bindings.role)')
+if [[ -n "$SANDBOX_ROLES" ]]; then
+  echo "error: ${SANDBOX_SA} に role が付いている。外してから deploy する:" >&2
+  echo "$SANDBOX_ROLES" >&2
+  exit 1
+fi
 
 # job は runner より先に置く（runner の SANDBOX_JOB が指す先）。入力は実行ごとの override で渡すので env は焼かない
 gcloud run jobs deploy "$SANDBOX_JOB_NAME" --project "$PROJECT" --region "$SANDBOX_REGION" --source sandbox \

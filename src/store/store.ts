@@ -8,6 +8,8 @@ export type Schedule = {
   computedAt: string;
   // automation の回はここより後のものを発火させる。tick ごとに進める
   watermark: string;
+  // 予定の差分を取り込んだが、まだ計算し直していない
+  stale?: boolean;
 };
 
 export type ToolCallRecord = { name: string; args: unknown; result: unknown };

@@ -37,6 +37,9 @@ async function sync(deps: Deps, ws: Workspace, role: CalendarRole): Promise<bool
     else upserts.push(e);
   }
   if (token && changes.events.length === 0 && !changes.full) return false;
+  // 差分を書いた後、計算し直す前に落ちても、次の tick で計算し直させる
+  const schedule = await deps.store.getSchedule(ws.id);
+  if (schedule && !schedule.stale) await deps.store.saveSchedule(ws.id, { ...schedule, stale: true });
   await deps.store.applyChanges(ws.id, role, { upserts, deletes, reset: changes.full, syncToken: changes.nextSyncToken });
   log("info", "calendar synced", { workspace: ws.id, role, upserts: upserts.length, deletes: deletes.length, full: changes.full });
   return true;
@@ -133,8 +136,9 @@ export async function tickWorkspace(deps: Deps, ws: Workspace): Promise<TickResu
   for (const role of roles(ws)) changed = (await sync(deps, ws, role)) || changed;
 
   let schedule = await deps.store.getSchedule(ws.id);
-  if (changed || !schedule || now - Date.parse(schedule.computedAt) > RECOMPUTE_EVERY) {
+  if (changed || !schedule || schedule.stale || now - Date.parse(schedule.computedAt) > RECOMPUTE_EVERY) {
     schedule = await recompute(deps, ws, schedule, now);
+    await deps.store.saveSchedule(ws.id, schedule);
   }
   const due = schedule.items.filter((i) => Date.parse(i.fireAt) <= now);
   let fired = 0;

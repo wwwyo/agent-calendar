@@ -96,3 +96,24 @@ describe("tick", () => {
     expect(Object.fromEntries(runs.map((r) => [r.eventId, r.status]))).toEqual({ ok: "succeeded", ng: "skipped" });
   });
 });
+
+describe("tick が途中で落ちたとき", () => {
+  test("差分を取り込んだ後に計算し直せなくても、次の tick で発火予定に載る", async () => {
+    const calendar = new FakeCalendar();
+    calendar.events.set("auto", [
+      { id: "ok", status: "confirmed", summary: "定期", notes: "---\nprompt: hi\n---", start: { dateTime: "2026-10-15T12:05:00+09:00" }, creatorEmail: "me@example.com", tags: {} },
+    ]);
+    // 2回目以降は差分なし
+    const listChanges = calendar.listChanges.bind(calendar);
+    calendar.listChanges = async (id, token) => (token ? { events: [], nextSyncToken: "t", full: false } : listChanges(id, token));
+    const store = new MemoryStore();
+    let now = Date.parse("2026-10-15T12:00:00+09:00");
+    const deps: Deps = { cfg, store, calendar, ai: fakeAi([]), now: () => now };
+    await tick(deps);
+    // 差分を取り込んだ直後に落ち、発火予定が古いまま stale の印だけ残った状態にする
+    await store.saveSchedule("demo", { items: [], computedAt: new Date(now).toISOString(), watermark: new Date(now).toISOString(), stale: true });
+    now += 6 * 60_000;
+    await tick(deps);
+    expect((await store.listRuns("demo", 10)).map((r) => r.eventId)).toEqual(["ok"]);
+  });
+});

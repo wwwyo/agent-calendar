@@ -63,7 +63,9 @@ async function recompute(deps: Deps, ws: Workspace, prev: Schedule | undefined, 
 }
 
 async function fire(deps: Deps, ws: Workspace, item: FireItem, now: number): Promise<Run | undefined> {
-  if (!(await deps.store.claimFire(ws.id, item.key))) return undefined;
+  // 発火済みの印は、同じ回をもう計算しなくなるまで残す（準備は締切の後まで）
+  const expireAt = new Date(Math.max(Date.parse(item.fireAt), Date.parse(item.occurrenceStart)) + 7 * 24 * 60 * 60 * 1000);
+  if (!(await deps.store.claimFire(ws.id, item.key, expireAt))) return undefined;
   const base: Run = {
     id: crypto.randomUUID(),
     fireKey: item.key,
@@ -160,7 +162,8 @@ export async function tickWorkspace(deps: Deps, ws: Workspace): Promise<TickResu
 export async function tick(deps: Deps): Promise<TickResult[] | "busy"> {
   const now = (deps.now ?? Date.now)();
   // 実行が1分を超えても次の tick と重ならないようにする
-  if (!(await deps.store.acquireLease("tick", 5 * 60 * 1000, now))) return "busy";
+  const owner = crypto.randomUUID();
+  if (!(await deps.store.acquireLease("tick", owner, 5 * 60 * 1000, now))) return "busy";
   try {
     const out: TickResult[] = [];
     for (const ws of deps.cfg.workspaces) {
@@ -172,6 +175,6 @@ export async function tick(deps: Deps): Promise<TickResult[] | "busy"> {
     }
     return out;
   } finally {
-    await deps.store.releaseLease("tick");
+    await deps.store.releaseLease("tick", owner);
   }
 }

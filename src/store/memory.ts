@@ -10,7 +10,7 @@ export class MemoryStore implements Store {
   private runs = new Map<string, Run>();
   private approvals = new Map<string, Approval>();
   private counters = new Map<string, number>();
-  private leases = new Map<string, number>();
+  private leases = new Map<string, { until: number; owner: string }>();
 
   async getSyncToken(ws: string, role: CalendarRole) {
     return this.tokens.get(`${ws}/${role}`);
@@ -37,7 +37,7 @@ export class MemoryStore implements Store {
     this.schedules.set(ws, s);
   }
 
-  async claimFire(ws: string, key: string) {
+  async claimFire(ws: string, key: string, _expireAt: Date) {
     const k = `${ws}/${key}`;
     if (this.fires.has(k)) return false;
     this.fires.add(k);
@@ -98,14 +98,14 @@ export class MemoryStore implements Store {
     return true;
   }
 
-  async acquireLease(name: string, ttlMs: number, now: number) {
-    const until = this.leases.get(name);
-    if (until && until > now) return false;
-    this.leases.set(name, now + ttlMs);
+  async acquireLease(name: string, owner: string, ttlMs: number, now: number) {
+    const lease = this.leases.get(name);
+    if (lease && lease.until > now) return false;
+    this.leases.set(name, { until: now + ttlMs, owner });
     return true;
   }
 
-  async releaseLease(name: string) {
-    this.leases.delete(name);
+  async releaseLease(name: string, owner: string) {
+    if (this.leases.get(name)?.owner === owner) this.leases.delete(name);
   }
 }

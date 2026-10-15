@@ -1,7 +1,7 @@
 import { Firestore, type DocumentReference } from "@google-cloud/firestore";
 import type { AuthClient } from "google-auth-library";
 import type { CalendarEvent } from "../calendar/adapter";
-import { hourBucket, type Approval, type CalendarRole, type Run, type Schedule, type Store } from "./store";
+import { expireAfterDays, hourBucket, RETENTION, type Approval, type CalendarRole, type Run, type Schedule, type Store } from "./store";
 
 // Firestore の doc id に使えない文字（/）を避ける
 const docId = (s: string) => encodeURIComponent(s);
@@ -60,9 +60,9 @@ export class FirestoreStore implements Store {
     await this.ws(ws).collection("state").doc("schedule").set(s);
   }
 
-  async claimFire(ws: string, key: string) {
+  async claimFire(ws: string, key: string, expireAt: Date) {
     try {
-      await this.ws(ws).collection("fires").doc(docId(key)).create({ key, claimedAt: new Date().toISOString() });
+      await this.ws(ws).collection("fires").doc(docId(key)).create({ key, claimedAt: new Date().toISOString(), expireAt });
       return true;
     } catch (e) {
       // ALREADY_EXISTS
@@ -79,7 +79,7 @@ export class FirestoreStore implements Store {
   }
 
   async saveRun(ws: string, run: Run) {
-    await this.ws(ws).collection("runs").doc(run.id).set(run);
+    await this.ws(ws).collection("runs").doc(run.id).set({ ...run, expireAt: expireAfterDays(run.startedAt, RETENTION.runs) });
   }
 
   async listRuns(ws: string, limit: number) {
@@ -93,7 +93,7 @@ export class FirestoreStore implements Store {
   }
 
   async saveApproval(ws: string, a: Approval) {
-    await this.ws(ws).collection("approvals").doc(a.id).set(a);
+    await this.ws(ws).collection("approvals").doc(a.id).set({ ...a, expireAt: expireAfterDays(a.createdAt, RETENTION.approvals) });
   }
 
   async getApproval(ws: string, id: string) {
@@ -123,22 +123,25 @@ export class FirestoreStore implements Store {
     return this.db.runTransaction(async (tx) => {
       const n = ((await tx.get(ref)).get("count") as number | undefined) ?? 0;
       if (n >= limit) return false;
-      tx.set(ref, { count: n + 1, bucket, hour: hourBucket(now) });
+      tx.set(ref, { count: n + 1, bucket, hour: hourBucket(now), expireAt: new Date(now + 2 * 60 * 60 * 1000) });
       return true;
     });
   }
 
-  async acquireLease(name: string, ttlMs: number, now: number) {
+  async acquireLease(name: string, owner: string, ttlMs: number, now: number) {
     const ref = this.db.collection("leases").doc(name);
     return this.db.runTransaction(async (tx) => {
       const until = (await tx.get(ref)).get("until") as number | undefined;
       if (until && until > now) return false;
-      tx.set(ref, { until: now + ttlMs });
+      tx.set(ref, { until: now + ttlMs, owner });
       return true;
     });
   }
 
-  async releaseLease(name: string) {
-    await this.db.collection("leases").doc(name).delete();
+  async releaseLease(name: string, owner: string) {
+    const ref = this.db.collection("leases").doc(name);
+    await this.db.runTransaction(async (tx) => {
+      if ((await tx.get(ref)).get("owner") === owner) tx.delete(ref);
+    });
   }
 }

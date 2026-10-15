@@ -8,13 +8,13 @@
 
 - Cloud Run の1 service（`src/server.ts`）が dashboard と `/tick` を持つ
 - Cloud Scheduler が1分ごとに `/tick` を OIDC token 付きで叩く。`/tick` は token の audience と email（runner の service account）を検証する。dashboard は公開
-- 状態は Firestore の `workspaces/{ws}/…`（`calendars` の syncToken、`events`、`state/schedule`、`fires`、`runs`、`approvals`）と、`ratelimits`・`leases`
+- 状態は Firestore の `workspaces/{ws}/…`（`calendars` の syncToken、`events`、`state/schedule`、`fires`、`runs`、`approvals`）と、`ratelimits`・`leases`。`fires`（回の後7日）・`runs`（30日）・`approvals`（30日）・`ratelimits`（2時間）は `expireAt` の TTL ポリシーで消す（`gcloud firestore fields ttls update expireAt --collection-group=<名前> --enable-ttl`）
 - agent は Vertex AI の `gemini-2.5-flash`（us-central1）。2026-10-15 時点で、この project から応答したのはこの組み合わせだけ（global・asia-northeast1、新しいモデルは 404）。`GEMINI_MODEL`・`VERTEX_LOCATION` で変えられる
 - 認証は Cloud Run に付けた service account だけ。鍵も API key も持たない。ローカルでは `gcloud auth print-access-token --impersonate-service-account` の token を `GOOGLE_ACCESS_TOKEN` で渡す
 
 ## tick の流れ（LLM を呼ばない部分）
 
-1. lease（`leases/tick`、5分）を取る。前の tick が実行中なら何もしない
+1. lease（`leases/tick`、5分、取った tick の owner id 付き）を取る。前の tick が実行中なら何もしない。解放は owner が一致するときだけ
 2. 組ごとに、各カレンダーの差分を syncToken で取る（`singleEvents=false`。繰り返し予定は親と、変更・削除された回で持つ）。410 なら全件を取り直す。終わった単発の予定と削除された予定は捨てる
 3. 予定が変わったか、前の計算から1時間たったら発火予定（`state/schedule`）を計算し直す
    - 起動用: 各予定の回のうち `(watermark, now + 48h]` に入るもの。RRULE は予定の tz の壁時計で展開し（`src/domain/time.ts`）、EXDATE と変更・削除された回を外す
@@ -23,6 +23,8 @@
 5. デモ用の印（extendedProperties.private `agentCalendarDemoExpiresAt`）が期限を過ぎた予定を消す
 
 runner が止まっていた間の起動用の回は、6時間前までを遅れて実行する。初回は今から先だけを見る。
+
+差分を書いた後、計算し直す前に落ちても取りこぼさないよう、差分を取り込む前に発火予定へ `stale` の印を付け、計算し直すまで残す。実行は agent を呼ぶ前に `running` で記録し、10分たっても `running` のものは dashboard に「中断」と出す。Bun.serve の `idleTimeout` は上限の255秒にする（既定の10秒では Gemini を待つ間に接続が切られる）。
 
 ## 発火させない条件
 
@@ -65,6 +67,7 @@ tools: [list_deadlines, propose_event]   # 省略するとすべて
 ## 既知の制約
 
 - カレンダーの読み書きは `CalendarAdapter` 越し。実装は service account に共有されたカレンダーを読むもの（`src/calendar/service-account.ts`）だけで、OAuth の adapter は提出後に別 branch で足す
+- propose_event の日時は、オフセットを省くと workspace の tz の壁時計として読む
 - RRULE の RDATE は読まない。UNTIL は tz の壁時計に直して比べる
 - Google Calendar は HOURLY 以下の繰り返しを受け付けない
 - 予定の反映は最大1分遅れる（push 通知は使わない）

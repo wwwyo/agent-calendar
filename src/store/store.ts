@@ -57,7 +57,7 @@ export interface Store {
   saveSchedule(ws: string, schedule: Schedule): Promise<void>;
 
   // 同じ発火を1度だけ実行するための予約。既に予約済みなら false
-  claimFire(ws: string, key: string): Promise<boolean>;
+  claimFire(ws: string, key: string, expireAt: Date): Promise<boolean>;
   firedKeys(ws: string, keys: string[]): Promise<Set<string>>;
 
   saveRun(ws: string, run: Run): Promise<void>;
@@ -74,8 +74,16 @@ export interface Store {
   hitRateLimit(bucket: string, limit: number, now: number): Promise<boolean>;
 
   // tick の重なりを避けるための lease
-  acquireLease(name: string, ttlMs: number, now: number): Promise<boolean>;
-  releaseLease(name: string): Promise<void>;
+  acquireLease(name: string, owner: string, ttlMs: number, now: number): Promise<boolean>;
+  // 取った本人のときだけ解放する
+  releaseLease(name: string, owner: string): Promise<void>;
+}
+
+// Firestore の TTL ポリシー（expireAt）で消すまでの期間
+export const RETENTION = { runs: 30, approvals: 30 } as const;
+
+export function expireAfterDays(from: string | number, days: number): Date {
+  return new Date(new Date(from).getTime() + days * 24 * 60 * 60 * 1000);
 }
 
 export function hourBucket(now: number): string {

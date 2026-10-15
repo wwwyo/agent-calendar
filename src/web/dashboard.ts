@@ -56,7 +56,10 @@ function scheduleRows(items: FireItem[], tz: string): string {
 function runStatus(r: Run): string {
   if (r.status === "succeeded") return `<span class="ok">成功</span>`;
   if (r.status === "failed") return `<span class="bad">失敗</span>`;
-  if (r.status === "running") return `<span class="warn">実行中</span>`;
+  if (r.status === "running") {
+    // Cloud Run の timeout（5分）を過ぎても running なら、実行中に process が落ちた
+    return Date.now() - Date.parse(r.startedAt) > 10 * 60 * 1000 ? `<span class="bad">中断</span>` : `<span class="warn">実行中</span>`;
+  }
   return `<span class="warn">実行せず</span>`;
 }
 

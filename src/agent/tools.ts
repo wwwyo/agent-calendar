@@ -2,7 +2,7 @@ import { Type, type FunctionDeclaration } from "@google/genai";
 import { z } from "zod";
 import type { EventTime } from "../calendar/adapter";
 import type { Workspace } from "../config";
-import { DAY, occurrences } from "../domain/time";
+import { DAY, fromWall, occurrences } from "../domain/time";
 import { parsePrepDays, stripPrepLines, type ToolName } from "../domain/payload";
 import type { Approval, Store } from "../store/store";
 
@@ -37,8 +37,15 @@ const ProposeArgs = z
   })
   .strict();
 
-function toEventTime(s: string, tz: string): EventTime | undefined {
+// 日付だけ・オフセット付き・オフセットなし（workspace の tz の壁時計として読む）を受け付ける
+export function toEventTime(s: string, tz: string): EventTime | undefined {
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return { date: s };
+  const local = s.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (local) {
+    const [, y, mo, d, h, mi, sec] = local.map(Number) as number[];
+    return { dateTime: iso(fromWall(Date.UTC(y!, mo! - 1, d!, h!, mi!, sec || 0), tz)), timeZone: tz };
+  }
+  if (!/(Z|[+-]\d{2}:?\d{2})$/.test(s)) return undefined;
   const t = Date.parse(s);
   return Number.isNaN(t) ? undefined : { dateTime: iso(t), timeZone: tz };
 }
@@ -96,7 +103,7 @@ export const TOOLS: Record<ToolName, Tool> = {
         type: Type.OBJECT,
         properties: {
           summary: { type: Type.STRING, description: "予定の title（80文字まで）" },
-          start: { type: Type.STRING, description: "開始。日付だけなら YYYY-MM-DD、時刻つきなら ISO 8601（オフセット付き）" },
+          start: { type: Type.STRING, description: "開始。日付だけなら YYYY-MM-DD、時刻つきなら ISO 8601（オフセットを省くと現在時刻と同じ tz として読む）" },
           end: { type: Type.STRING, description: "終了（省略可。省略すると全日は1日、時刻つきは30分）" },
           notes: { type: Type.STRING, description: "予定の説明（500文字まで）" },
         },

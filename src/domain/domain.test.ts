@@ -85,3 +85,13 @@ describe("computeSchedule", () => {
     ]);
   });
 });
+
+describe("propose_event の日時", () => {
+  test("オフセットなしは workspace の tz の壁時計として読み、読めない形は拒む", async () => {
+    const { toEventTime } = await import("../agent/tools");
+    expect(toEventTime("2026-10-20T10:00", "Asia/Tokyo")).toEqual({ dateTime: "2026-10-20T01:00:00.000Z", timeZone: "Asia/Tokyo" });
+    expect(toEventTime("2026-10-20T10:00:00+09:00", "Asia/Tokyo")).toEqual({ dateTime: "2026-10-20T01:00:00.000Z", timeZone: "Asia/Tokyo" });
+    expect(toEventTime("2026-10-20", "Asia/Tokyo")).toEqual({ date: "2026-10-20" });
+    expect(toEventTime("Oct 20 2026 10:00", "Asia/Tokyo")).toBeUndefined();
+  });
+});

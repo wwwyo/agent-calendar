@@ -2,5 +2,22 @@
   "name": "agent-calendar",
   "private": true,
   "type": "module",
-  "scripts": {}
+  "scripts": {
+    "dev": "GOOGLE_ACCESS_TOKEN=$(gcloud auth print-access-token --impersonate-service-account=runner@agent-calendar-wwwyo.iam.gserviceaccount.com --scopes=https://www.googleapis.com/auth/calendar,https://www.googleapis.com/auth/cloud-platform) GCP_PROJECT=agent-calendar-wwwyo WORKSPACES=\"$(cat deploy/workspaces.demo.json)\" STORE=${STORE:-memory} TICK_AUTH=none bun run src/server.ts",
+    "start": "bun run src/server.ts",
+    "test": "bun test",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "@google-cloud/firestore": "9.3.1",
+    "@google/genai": "2.28.0",
+    "google-auth-library": "11.2.0",
+    "rrule": "2.8.1",
+    "yaml": "2.9.1",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.2",
+    "typescript": "7.0.2"
+  }
 }

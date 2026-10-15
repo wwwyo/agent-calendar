@@ -1,0 +1,13 @@
+[
+  {
+    "id": "demo",
+    "label": "デモ",
+    "visibility": "public",
+    "timeZone": "Asia/Tokyo",
+    "calendars": {
+      "automation": "afb1726db50e354ceb63e9309ca4b0cf9d1fa10134cf68d3286ee0246b2222c3@group.calendar.google.com",
+      "records": "edbd692e535ff40b1188ffc96747fea59142166ee11616144f82e9cd0680da79@group.calendar.google.com"
+    },
+    "allowedCreators": ["runner@agent-calendar-wwwyo.iam.gserviceaccount.com", "w.ytmrm11811@gmail.com"]
+  }
+]

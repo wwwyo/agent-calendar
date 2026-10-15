@@ -56,6 +56,7 @@ function fakeAi(opts: { judge?: (text: string) => Partial<JudgmentOutput> | Erro
 
 class FakeCloud implements CloudLauncher {
   started: SandboxJobInput[] = [];
+  revoked: string[] = [];
   fail = false;
   async start(input: SandboxJobInput) {
     if (this.fail) throw new Error("quota");
@@ -86,7 +87,7 @@ function setup(c: Config = cfg, ai = fakeAi()) {
   const store = new MemoryStore();
   const cloud = new FakeCloud();
   const clock = { now: at("12:00") };
-  const deps: Deps = { cfg: c, store, calendar, ai, cloud, now: () => clock.now };
+  const deps: Deps = { cfg: c, store, calendar, ai, cloud, revokeRun: async (ws, runId) => void cloud.revoked.push(`${ws}/${runId}`), now: () => clock.now };
   return { calendar, store, cloud, clock, deps };
 }
 
@@ -202,7 +203,9 @@ describe("tick", () => {
     expect((await store.listRuns("demo", 10)).find((r) => r.eventId === "b")).toMatchObject({ status: "running" });
     clock.now = at("12:31");
     await tick(deps);
-    expect((await store.listRuns("demo", 10)).find((r) => r.eventId === "b")).toMatchObject({ status: "failed", reason: "sandbox から結果が返らなかった" });
+    const b = (await store.listRuns("demo", 10)).find((r) => r.eventId === "b")!;
+    expect(b).toMatchObject({ status: "failed", reason: "sandbox から結果が返らなかった" });
+    expect(cloud.revoked).toEqual([`demo/${b.id}`]);
   });
 
   test("cloud の job がない環境では、cloud の回を failed で記録する", async () => {

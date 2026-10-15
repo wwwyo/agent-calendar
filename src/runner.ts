@@ -18,7 +18,16 @@ import { log } from "./log";
 import type { CalendarRole, Run, Schedule, Store } from "./store/store";
 
 // cloud: 無ければ cloud の回は failed で記録する（ローカル確認など sandbox の job がない環境）
-export type Deps = { cfg: Config; store: Store; calendar: CalendarAdapter; ai: GoogleGenAI; cloud?: CloudLauncher; now?: () => number };
+// revokeRun: deadlineAt を過ぎた cloud の回を閉じたときに、その回の sandbox token を失効させる
+export type Deps = {
+  cfg: Config;
+  store: Store;
+  calendar: CalendarAdapter;
+  ai: GoogleGenAI;
+  cloud?: CloudLauncher;
+  revokeRun?: (ws: string, runId: string) => Promise<void>;
+  now?: () => number;
+};
 
 // automation の回はこの先まで発火予定に載せる
 const HORIZON = 48 * 60 * 60 * 1000;
@@ -214,6 +223,7 @@ async function sweepRuns(deps: Deps, ws: Workspace, now: number): Promise<number
     if (r.executor === "cloud" && r.status === "running" && r.deadlineAt && Date.parse(r.deadlineAt) < now) {
       // token は deadlineAt と同じ時刻に切れ、running でない Run への結果は捨てられる
       done = await deps.store.updateRunIf(ws.id, r.id, "running", { status: "failed", reason: "sandbox から結果が返らなかった", finishedAt: at });
+      if (done) await revoke(deps, ws, r.id);
     } else if (r.executor === "local" && r.status === "queued" && now - Date.parse(r.scheduledAt) > LOCAL_UNCLAIMED_MS) {
       done = await deps.store.updateRunIf(ws.id, r.id, "queued", { status: "skipped", reason: "local worker が受け取らなかった", finishedAt: at });
     }
@@ -223,6 +233,15 @@ async function sweepRuns(deps: Deps, ws: Workspace, now: number): Promise<number
     }
   }
   return n;
+}
+
+// token は期限でも切れるので、失効に失敗しても tick は止めない
+async function revoke(deps: Deps, ws: Workspace, runId: string) {
+  try {
+    await deps.revokeRun?.(ws.id, runId);
+  } catch (e) {
+    log("error", "sandbox token revoke failed", { workspace: ws.id, runId, error: (e as Error).message });
+  }
 }
 
 // デモ用フォームで足した予定は、期限が来たらカレンダーから消す

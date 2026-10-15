@@ -45,7 +45,7 @@ const EnvSchema = z.object({
   RUN_LIMIT_PER_HOUR: z.coerce.number().default(60),
   // デモ用フォームで足した予定を消すまでの時間
   DEMO_EVENT_TTL_HOURS: z.coerce.number().default(6),
-  // cloud の回を動かす Cloud Run Job の名前と、job から結果を返す先（この runner の URL）。無ければ cloud の回は failed で記録する
+  // cloud の回を動かす Cloud Run Job の resource 名と、job から結果を返す先（この runner の URL）。無ければ cloud の回は failed で記録する
   SANDBOX_JOB: z.string().min(1).optional(),
   RUNNER_URL: z.url().optional(),
 });
@@ -60,9 +60,16 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   if (rest.TICK_AUTH === "oidc" && (!rest.TICK_AUDIENCE || !rest.TICK_INVOKER_EMAIL)) {
     throw new Error("TICK_AUTH=oidc には TICK_AUDIENCE と TICK_INVOKER_EMAIL が要る");
   }
+  if (!rest.SANDBOX_JOB !== !rest.RUNNER_URL) throw new Error("SANDBOX_JOB と RUNNER_URL は両方を設定するか、両方を外す");
+  if (rest.SANDBOX_JOB && !SANDBOX_JOB_PATTERN.test(rest.SANDBOX_JOB)) {
+    throw new Error(`SANDBOX_JOB は job の resource 名（projects/{p}/locations/us-central1/jobs/agent-sandbox）にする: ${rest.SANDBOX_JOB}`);
+  }
   for (const ws of workspaces) checkWorkspace(ws);
   return { ...rest, workspaces };
 }
+
+// src/cloud/launcher.ts の SANDBOX_JOB_PATTERN と同じ形。config は cloud の実装を import しない
+const SANDBOX_JOB_PATTERN = /^projects\/[^/]+\/locations\/[^/]+\/jobs\/[^/]+$/;
 
 const SERVICE_ACCOUNT = /@[^@]+\.iam\.gserviceaccount\.com$/i;
 

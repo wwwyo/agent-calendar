@@ -1,5 +1,5 @@
 ---
-status: ready
+status: in-progress
 ---
 
 # 自然言語で実行先と agent を選ぶ（agent-dispatch）

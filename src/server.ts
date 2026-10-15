@@ -1,7 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { OAuth2Client } from "google-auth-library";
 import { createAuthClient } from "./auth";
-import type { CloudLauncher } from "./dispatch/types";
+import { createCloudSandbox } from "./cloud";
 import { ServiceAccountCalendar } from "./calendar/service-account";
 import { loadConfig, type Workspace } from "./config";
 import { log } from "./log";
@@ -23,10 +23,23 @@ const ai = new GoogleGenAI({
   location: cfg.VERTEX_LOCATION,
   ...(cfg.GOOGLE_ACCESS_TOKEN ? { googleAuthOptions: { authClient: auth as never } } : {}),
 });
-// cloud sandbox（src/cloud/）をつなぐまでの仮置き。統合のときに C の CloudLauncher の実装と handleSandbox に差し替える
-const cloud: CloudLauncher | undefined = undefined;
-const handleSandbox = async (_req: Request): Promise<Response | undefined> => undefined;
-const deps: Deps = { cfg, store, calendar, ai, cloud };
+// SANDBOX_JOB と RUNNER_URL が無い環境（ローカル確認など）では cloud の回を failed で記録し、/sandbox/* は 404 を返す
+const sandbox =
+  cfg.SANDBOX_JOB && cfg.RUNNER_URL
+    ? createCloudSandbox({
+        project: cfg.GCP_PROJECT,
+        vertexLocation: cfg.VERTEX_LOCATION,
+        model: cfg.GEMINI_MODEL,
+        sandboxJob: cfg.SANDBOX_JOB,
+        runnerUrl: cfg.RUNNER_URL,
+        auth,
+        runs: store,
+        store: cfg.STORE,
+        ...(cfg.GOOGLE_ACCESS_TOKEN ? { firestoreAuth: auth } : {}),
+      })
+    : undefined;
+const handleSandbox = async (req: Request): Promise<Response | undefined> => sandbox?.handleSandbox(req);
+const deps: Deps = { cfg, store, calendar, ai, cloud: sandbox?.launcher, revokeRun: sandbox?.revokeRun };
 const oidc = new OAuth2Client();
 
 async function verifyTick(req: Request): Promise<boolean> {

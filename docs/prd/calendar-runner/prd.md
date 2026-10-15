@@ -25,7 +25,7 @@ Story「人が、自分の予定と締切を Google Calendar に書いておく�
 ### Non-Goals
 
 - OAuth でカレンダーを読むこと。MVP は service account に共有されたカレンダーだけを読み、OAuth の adapter は提出後に別 branch で足す
-- local の agent（Claude Code・Orca 等）を起こすこと。起動先は cloud の Gemini だけ
+- local の agent（Claude Code・Orca 等）を起こすこと。起動先は cloud の Gemini だけ（[agent-dispatch](../agent-dispatch/prd.md) で扱う）
 - 外部への通知（メール・Slack）、任意 URL の取得など、allowlist 外の tool
 - 予定の即時反映（push 通知）。反映は1分ごとの取得で足りるとする
 - 本人のカレンダー（owner 組）をつなぐこと。MVP は demo 組だけを動かし、組を設定で増やせる作りだけを残す

@@ -35,14 +35,22 @@ mise install   # mise.toml に従ってツールをインストール
 bun install
 ```
 
-<起動・テスト・lint・deploy のコマンドは実装時に追記する>
+```bash
+bun test               # テスト
+bun run typecheck      # 型検査
+bun run dev            # ローカル起動（実カレンダー・Vertex AI。service account を gcloud で借りる）
+./deploy/deploy.sh     # Cloud Run と Cloud Scheduler へ反映
+```
+
+- 設計の正本は `docs/prd/calendar-runner/dd.md`
+- Vertex AI は `gemini-2.5-flash`（us-central1）。2026-10-15 時点で global と asia-northeast1、新しいモデルは 404 だった
 
 ## 技術スタック
 
 - Bun + TypeScript
 - Google Cloud: Cloud Run（runner と dashboard）、Cloud Scheduler（定期の取得）、Firestore（syncToken・発火済みの記録・実行記録）
 - Google Calendar API（service account に共有したカレンダーを読む）
-- Gemini API（agent の実行）
+- Vertex AI の Gemini（agent の実行。service account で認証）
 
 ## Skills
 

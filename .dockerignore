@@ -1,0 +1,8 @@
+node_modules
+.git
+docs
+.agents
+.claude
+.codex
+.pi
+*.test.ts

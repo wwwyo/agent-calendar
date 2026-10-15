@@ -47,4 +47,5 @@ bun install
 ## Skills
 
 - PR の自動レビューは Pullfrog。設定の正本は `.github/pullfrog.config.sh`（初回レビュー自動・追加コミットも再レビュー・手動依頼は `@pullfrog`）
+- Cloud Run の deploy・設定は `.agents/skills/cloud-run-basics/`、ADK で agent を書くときは `.agents/skills/google-agents-cli-adk-code/` を読む（取得元は google/skills・google/agents-cli。版は `.agents/skillctrl/lock.json` の skillFolderHash。Claude 用は `.claude/skills/` の相対 symlink）
 - 学び・ハマりどころ・過去の失敗は `.agents/skills/<topic>/` を参照

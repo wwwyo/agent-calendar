@@ -238,7 +238,7 @@ document.querySelector(".cal").addEventListener("click",(e)=>{
     +(it.blocked?'<p class="status-bad">発火しない（'+esc(it.blocked)+'）</p>':"")
     +(it.sessions.length?'<h3 class="text-heading">セッション</h3>'+it.sessions.map((s)=>'<a class="ev-session" href="/w/'+WS+'/sessions/'+encodeURIComponent(s.id)+'">'+status(s)+'<span class="meta">'+esc(when(s.startedAt))+'</span><span>開く →</span></a>').join(""):"")
     +(it.notes?'<h3 class="text-heading">notes</h3><pre class="code">'+esc(it.notes)+'</pre>':"")
-    +'<div class="actions">'+(it.deletable?'<form class="inline" method="post" action="/w/'+WS+'/demo/events/'+role+'/'+encodeURIComponent(it.id)+'/delete#'+week+'"><button class="btn btn-outline">'+(it.recurring?"繰り返しごと消す":"消す")+'</button></form>':'<span class="text-muted">デモで足した予定だけ消せる。</span>')
+    +'<div class="actions">'+(it.deletable?'<form class="inline" method="post" action="/w/'+WS+'/demo/events/'+role+'/'+encodeURIComponent(it.id)+'/delete#'+week+'"><button class="btn btn-outline">'+(it.role==="prep"?"締切ごと消す":it.recurring?"繰り返しごと消す":"消す")+'</button></form>':'<span class="text-muted">デモで足した予定だけ消せる。</span>')
     +'<button type="button" class="btn btn-outline" data-close-ev>閉じる</button></div>';
   evDlg.querySelector("[data-close-ev]").onclick=()=>evDlg.close();
   evDlg.showModal();

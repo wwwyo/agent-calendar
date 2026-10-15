@@ -54,6 +54,25 @@ describe("calendarItems", () => {
   });
 });
 
+describe("calendarItems の準備の開始と壊れた終了", () => {
+  test("準備の開始にその回のセッションと繰り返しを付け、終了が読めない予定は30分で描く", () => {
+    const { from, to } = weekRange("2026-10-12", ws, now)!;
+    const run: Run = { id: "p1", fireKey: "", kind: "prep", title: "t", eventId: "due", scheduledAt: "2026-10-16T00:00:00.000Z", startedAt: "2026-10-16T00:00:01.000Z", status: "running", toolCalls: [] };
+    const items = calendarItems({
+      ws,
+      now,
+      from,
+      to,
+      runs: [run],
+      automation: [ev({ id: "bad", notes: "---\nprompt: hi\n---", start: { dateTime: "2026-10-16T09:00:00+09:00" }, end: { dateTime: "x" } })],
+      records: [ev({ id: "due", notes: "準備: 2日前", start: { date: "2026-10-18" }, recurrence: ["RRULE:FREQ=YEARLY"] })],
+    });
+    const prep = items.find((i) => i.role === "prep")!;
+    expect([prep.recurring, prep.sessions.map((s) => s.id)]).toEqual([true, ["p1"]]);
+    expect(items.find((i) => i.id === "bad")!.minutes).toBe(30);
+  });
+});
+
 describe("フォームの開始", () => {
   const f = { title: "t", repeat: "none" as const, prompt: "p" };
   test("tz の壁時計で読み、1分後〜30日後だけを受け付ける", () => {

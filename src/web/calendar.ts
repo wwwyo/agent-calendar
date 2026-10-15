@@ -45,7 +45,9 @@ export function calendarItems(input: { ws: Workspace; automation: CalendarEvent[
                 return p.ok ? undefined : `payload を読めない: ${p.reason}`;
               })();
       const allDay = isAllDay(e.start);
-      const minutes = e.end && !isAllDay(e.end) && !isAllDay(e.start) ? Math.max(15, (Date.parse(e.end.dateTime) - Date.parse(e.start.dateTime)) / 60000) : 30;
+      // 終了が読めない予定は30分として描く
+      const span = e.end && !isAllDay(e.end) && !isAllDay(e.start) ? (Date.parse(e.end.dateTime) - Date.parse(e.start.dateTime)) / 60000 : NaN;
+      const minutes = Number.isFinite(span) && span > 0 ? Math.max(15, span) : 30;
       for (const t of occurrences(e, ws.timeZone, from - 1, to - 1, ex.get(e.id))) {
         const iso = new Date(t).toISOString();
         items.push({
@@ -78,10 +80,10 @@ export function calendarItems(input: { ws: Workspace; automation: CalendarEvent[
       start: p.fireAt,
       minutes: 30,
       notes: e?.notes ?? "",
-      recurring: false,
+      recurring: !!e?.recurrence?.length,
       deletable: !!e?.tags[DEMO_EXPIRES_TAG],
       expiresAt: e?.tags[DEMO_EXPIRES_TAG],
-      sessions: [],
+      sessions: runsOf((r) => r.kind === "prep" && r.eventId === p.eventId && r.scheduledAt === p.fireAt),
     });
   }
   return items.sort((a, b) => a.start.localeCompare(b.start));

@@ -6,6 +6,7 @@
     "dev": "GOOGLE_ACCESS_TOKEN=$(gcloud auth print-access-token --impersonate-service-account=runner@agent-calendar-wwwyo.iam.gserviceaccount.com --scopes=https://www.googleapis.com/auth/calendar,https://www.googleapis.com/auth/cloud-platform) GCP_PROJECT=agent-calendar-wwwyo WORKSPACES=\"$(cat deploy/workspaces.demo.json)\" STORE=${STORE:-memory} TICK_AUTH=none bun run src/server.ts",
     "start": "bun run src/server.ts",
     "test": "bun test",
+    "worker": "bun run src/worker/main.ts",
     "typecheck": "tsc -p ."
   },
   "dependencies": {

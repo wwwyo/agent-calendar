@@ -7,6 +7,21 @@ import { TOOLS, type ToolContext } from "./tools";
 import { log } from "../log";
 
 const MAX_TURNS = 6;
+// Vertex AI の共有枠は混むと 429 を返す。数秒おいて取り直す
+const RETRY_DELAYS_MS = [2000, 6000];
+
+export async function withRetry<T>(f: () => Promise<T>, delays = RETRY_DELAYS_MS): Promise<T> {
+  for (let i = 0; ; i++) {
+    try {
+      return await f();
+    } catch (e) {
+      const status = (e as { status?: number }).status ?? Number(/"code":\s*(\d+)/.exec(String((e as Error).message))?.[1]);
+      if (i >= delays.length || (status !== 429 && status !== 503)) throw e;
+      log("warn", "gemini retry", { status, attempt: i + 1 });
+      await Bun.sleep(delays[i]!);
+    }
+  }
+}
 
 const SYSTEM = `あなたは agent-calendar の agent です。人が Google Calendar に書いた予定と締切をもとに、準備と定期の仕事を進めます。
 守ること:
@@ -46,6 +61,8 @@ export async function runAgent(input: {
   run: Run;
   task: { input: string; tools: ToolName[] };
   ctx: ToolContext;
+  // 途中経過を保存し、dashboard で逐次読めるようにする
+  onProgress?: (run: Run) => Promise<void>;
 }): Promise<Run> {
   const { ai, model, task, ctx } = input;
   const run: Run = { ...input.run, model, input: task.input };
@@ -55,17 +72,19 @@ export async function runAgent(input: {
   const allowed = new Set(task.tools);
   try {
     for (let turn = 0; turn < MAX_TURNS; turn++) {
-      const res = await ai.models.generateContent({
-        model,
-        contents,
-        config: {
-          systemInstruction: SYSTEM,
-          temperature: 0.2,
-          maxOutputTokens: 4096,
-          thinkingConfig: { thinkingBudget: 1024 },
-          tools: [{ functionDeclarations: task.tools.map((t) => TOOLS[t].declaration) }],
-        },
-      });
+      const res = await withRetry(() =>
+        ai.models.generateContent({
+          model,
+          contents,
+          config: {
+            systemInstruction: SYSTEM,
+            temperature: 0.2,
+            maxOutputTokens: 4096,
+            thinkingConfig: { thinkingBudget: 1024 },
+            tools: [{ functionDeclarations: task.tools.map((t) => TOOLS[t].declaration) }],
+          },
+        }),
+      );
       usage.promptTokens += res.usageMetadata?.promptTokenCount ?? 0;
       usage.outputTokens += res.usageMetadata?.candidatesTokenCount ?? 0;
       usage.totalTokens += res.usageMetadata?.totalTokenCount ?? 0;
@@ -83,6 +102,10 @@ export async function runAgent(input: {
           ? await TOOLS[name as ToolName].run(call.args ?? {}, ctx).catch((e: Error) => ({ error: e.message }))
           : { error: `tool ${name} は許可されていない` };
         toolCalls.push({ name, args: call.args ?? {}, result });
+        // 途中経過の保存は表示のためだけなので、失敗しても実行は続ける
+        await input.onProgress?.({ ...run, status: "running", toolCalls: [...toolCalls], usage: { ...usage } }).catch((e: Error) =>
+          log("warn", "progress save failed", { runId: run.id, error: e.message }),
+        );
         log("info", "tool call", { runId: run.id, tool: name });
         parts.push({ functionResponse: { id: call.id, name, response: { result } } });
       }

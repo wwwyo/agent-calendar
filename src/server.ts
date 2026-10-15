@@ -9,7 +9,7 @@ import { DEMO_EXPIRES_TAG, tick, type Deps } from "./runner";
 import { FirestoreStore } from "./store/firestore";
 import { MemoryStore } from "./store/memory";
 import type { Store } from "./store/store";
-import { renderWorkspace } from "./web/dashboard";
+import { renderSessionPage, renderSessionsPage } from "./web/dashboard";
 import { AutomationForm, automationEvent, DeadlineForm, deadlineEvent } from "./web/demo";
 
 const cfg = loadConfig();
@@ -55,8 +55,8 @@ async function allowWrite(req: Request, server: Bun.Server<unknown>, ws: Workspa
   return (await store.hitRateLimit(`${ws.id}:ip:${ip}`, cfg.DEMO_LIMIT_PER_IP, now)) && (await store.hitRateLimit(`${ws.id}:global`, cfg.DEMO_LIMIT_GLOBAL, now));
 }
 
-const back = (ws: Workspace, flash: string) =>
-  new Response(null, { status: 303, headers: { Location: `/w/${ws.id}?flash=${encodeURIComponent(flash)}` } });
+const back = (ws: Workspace, flash: string, path = "") =>
+  new Response(null, { status: 303, headers: { Location: `/w/${ws.id}${path}?flash=${encodeURIComponent(flash)}` } });
 
 class WriteFailed extends Error {
   constructor(readonly ws: Workspace, message: string) {
@@ -75,21 +75,48 @@ async function write<T>(ws: Workspace, f: () => Promise<T>): Promise<T> {
 
 const LIMITED = "1時間あたりの回数の上限に達した。しばらくしてから試してください。";
 
-async function page(ws: Workspace, flash?: string): Promise<Response> {
+const today = (ws: Workspace) => new Date(toWall(Date.now(), ws.timeZone)).toISOString().slice(0, 10);
+const html = (body: string) => new Response(body, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+
+// 一覧は全員が数秒ごとに読むので、Firestore の読み取りを instance ごとに数秒まとめる
+const SESSIONS_CACHE_MS = 2500;
+const sessionsCache = new Map<string, { at: number; body: unknown }>();
+
+async function sessionsJson(ws: Workspace) {
+  const hit = sessionsCache.get(ws.id);
+  if (hit && Date.now() - hit.at < SESSIONS_CACHE_MS) return hit.body;
   const [schedule, runs, approvals, automation, records] = await Promise.all([
     store.getSchedule(ws.id),
-    store.listRuns(ws.id, 20),
-    store.listApprovals(ws.id, 20),
+    store.listRuns(ws.id, 30),
+    store.listApprovals(ws.id, 50),
     store.listEvents(ws.id, "automation"),
     store.listEvents(ws.id, "records"),
   ]);
-  const demoEvents = [
-    ...automation.map((e) => ({ role: "automation" as const, e })),
-    ...records.map((e) => ({ role: "records" as const, e })),
-  ].filter(({ e }) => e.tags[DEMO_EXPIRES_TAG] && e.status !== "cancelled" && !e.recurringEventId);
-  const today = new Date(toWall(Date.now(), ws.timeZone)).toISOString().slice(0, 10);
-  const html = renderWorkspace({ ws, schedule, runs, approvals, demoEvents, flash, today, workspaces: cfg.workspaces });
-  return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+  const pending = new Map<string, number>();
+  for (const a of approvals) if (a.status === "pending") pending.set(a.runId, (pending.get(a.runId) ?? 0) + 1);
+  const body = {
+    next: (schedule?.items ?? []).slice(0, 3).map((i) => ({ fireAt: i.fireAt, title: i.title, blocked: i.blocked })),
+    // デモ用フォームで足した予定（dashboard から消せる）
+    demoEvents: [
+      ...automation.map((e) => ({ role: "automation" as const, e })),
+      ...records.map((e) => ({ role: "records" as const, e })),
+    ]
+      .filter(({ e }) => e.tags[DEMO_EXPIRES_TAG] && e.status !== "cancelled" && !e.recurringEventId)
+      .map(({ role, e }) => ({ role, id: e.id, title: e.summary, expiresAt: e.tags[DEMO_EXPIRES_TAG] })),
+    sessions: runs.map((r) => ({
+      id: r.id,
+      title: r.title,
+      kind: r.kind,
+      status: r.status,
+      startedAt: r.startedAt,
+      finishedAt: r.finishedAt,
+      late: r.late,
+      toolCalls: r.toolCalls.length,
+      pendingApprovals: pending.get(r.id) ?? 0,
+    })),
+  };
+  sessionsCache.set(ws.id, { at: Date.now(), body });
+  return body;
 }
 
 async function formOf(req: Request): Promise<Record<string, string>> {
@@ -115,10 +142,27 @@ const server = Bun.serve({
         return Response.json(result);
       },
     },
-    "/w/:ws": async (req) => {
+    "/w/:ws": (req) => {
       const ws = publicWorkspace(req.params.ws);
       if (!ws) return new Response("not found", { status: 404 });
-      return page(ws, new URL(req.url).searchParams.get("flash") ?? undefined);
+      return html(renderSessionsPage(ws, today(ws), new URL(req.url).searchParams.get("flash") ?? undefined));
+    },
+    "/w/:ws/sessions/:id": (req) => {
+      const ws = publicWorkspace(req.params.ws);
+      if (!ws) return new Response("not found", { status: 404 });
+      return html(renderSessionPage(ws, req.params.id, new URL(req.url).searchParams.get("flash") ?? undefined));
+    },
+    "/w/:ws/api/sessions": async (req) => {
+      const ws = publicWorkspace(req.params.ws);
+      if (!ws) return new Response("not found", { status: 404 });
+      return Response.json(await sessionsJson(ws), { headers: { "Cache-Control": "no-store" } });
+    },
+    "/w/:ws/api/sessions/:id": async (req) => {
+      const ws = publicWorkspace(req.params.ws);
+      if (!ws) return new Response("not found", { status: 404 });
+      const [session, approvals] = await Promise.all([store.getRun(ws.id, req.params.id), store.listApprovals(ws.id, 50)]);
+      if (!session) return new Response("not found", { status: 404 });
+      return Response.json({ session, approvals: approvals.filter((a) => a.runId === session.id) }, { headers: { "Cache-Control": "no-store" } });
     },
     "/w/:ws/demo/automation": {
       POST: async (req, srv) => {
@@ -129,7 +173,7 @@ const server = Bun.serve({
         if (!(await allowWrite(req, srv, ws))) return back(ws, LIMITED);
         const e = await write(ws, () => calendar.insertEvent(ws.calendars.automation, automationEvent(f.data, ws, Date.now(), cfg.DEMO_EVENT_TTL_HOURS)));
         log("info", "demo event created", { workspace: ws.id, role: "automation", eventId: e.id });
-        return back(ws, `起動用カレンダーに「${f.data.title}」を書いた。開始時刻になると発火する（1分以内に発火予定に出る）。`);
+        return back(ws, `「${f.data.title}」を追加した。`);
       },
     },
     "/w/:ws/demo/deadline": {
@@ -143,7 +187,7 @@ const server = Bun.serve({
         if (!(await allowWrite(req, srv, ws))) return back(ws, LIMITED);
         const e = await write(ws, () => calendar.insertEvent(ws.calendars.records, ev));
         log("info", "demo event created", { workspace: ws.id, role: "records", eventId: e.id });
-        return back(ws, `記録用カレンダーに「${f.data.title}」を書いた。準備を始める日を過ぎていれば1分以内に準備が始まる。`);
+        return back(ws, `「${f.data.title}」を追加した。`);
       },
     },
     "/w/:ws/demo/events/:role/:id/delete": {
@@ -156,7 +200,7 @@ const server = Bun.serve({
         if (!e?.tags[DEMO_EXPIRES_TAG]) return back(ws, "デモで足した予定だけを消せる。");
         if (!(await allowWrite(req, srv, ws))) return back(ws, LIMITED);
         await write(ws, () => calendar.deleteEvent(ws.calendars[role], e.id));
-        return back(ws, `「${e.summary}」を消した。1分以内に発火予定から外れる。`);
+        return back(ws, `「${e.summary}」を消した。`);
       },
     },
     "/w/:ws/approvals/:id/:decision": {
@@ -167,7 +211,8 @@ const server = Bun.serve({
         if (!(await allowWrite(req, srv, ws))) return back(ws, LIMITED);
         const a = await store.decideApproval(ws.id, req.params.id, decision === "approve" ? "approved" : "rejected");
         if (!a) return back(ws, "この承認待ちは既に決定済み。");
-        if (a.status === "rejected") return back(ws, "却下した。");
+        const to = `/sessions/${encodeURIComponent(a.runId)}`;
+        if (a.status === "rejected") return back(ws, "却下した。", to);
         try {
           const op = a.operation;
           const created = await calendar.insertEvent(ws.calendars.records, {
@@ -179,10 +224,10 @@ const server = Bun.serve({
             tags: { [DEMO_EXPIRES_TAG]: new Date(Date.now() + cfg.DEMO_EVENT_TTL_HOURS * 60 * 60 * 1000).toISOString() },
           });
           await store.saveApproval(ws.id, { ...a, createdEventId: created.id });
-          return back(ws, `承認して記録用カレンダーに「${op.summary}」を追加した。`);
+          return back(ws, `「${op.summary}」を追加した。`, to);
         } catch (e) {
           await store.saveApproval(ws.id, { ...a, status: "failed", error: (e as Error).message.slice(0, 300) });
-          return back(ws, "カレンダーへの追加に失敗した。");
+          return back(ws, "カレンダーへの追加に失敗した。", to);
         }
       },
     },

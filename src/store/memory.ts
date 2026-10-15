@@ -62,6 +62,10 @@ export class MemoryStore implements Store {
       .slice(0, limit);
   }
 
+  async getRun(ws: string, id: string) {
+    return this.runs.get(`${ws}/${id}`);
+  }
+
   async countRunsSince(ws: string, since: string) {
     return this.wsRuns(ws).filter((r) => r.startedAt >= since && r.status !== "skipped").length;
   }

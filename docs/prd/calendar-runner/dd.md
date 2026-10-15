@@ -55,6 +55,12 @@ tools: [list_deadlines, propose_event]   # 省略するとすべて
 
 ## dashboard とデモ用フォーム
 
+- 画面はセッション（agent の1回の実行）の一覧 `/w/{ws}` と、セッション詳細 `/w/{ws}/sessions/{id}` の2つ
+- 一覧は3秒ごと、詳細は実行中のあいだ2秒ごとに JSON（`/w/{ws}/api/sessions…`）を読み直す。タブが見えていないときは読まない。一覧の JSON は instance ごとに2.5秒まとめ、Firestore の読み取りを閲覧者の数に比例させない
+- runner は agent を呼ぶ前に入力を `running` で保存し、tool を1回呼ぶたびに途中経過を保存する。詳細では入力・tool 呼び出し・出力が順に増えていく
+- 承認・却下は、その提案を出したセッションの詳細に置く。デモ用フォームは一覧の下に置く
+- 画面に仕組みの説明は置かない（README と提出文に置く）
+
 - `visibility: public` の組だけを `/w/{ws}` に出す。private の組は runner が動かすだけで表示しない（認証は未実装）
 - public の組では、誰でもフォームから runner の service account に予定を書かせられる。入力は信頼しない: タイトル60文字（改行を潰す）、prompt 500文字、notes 300文字、開始は1〜30分後、繰り返しはなし・毎日3回・毎週3回、締切は今日〜1年以内
 - 書き込み系（フォーム・削除・承認・却下）は IP ごと（`DEMO_LIMIT_PER_IP`、既定5）と組全体（`DEMO_LIMIT_GLOBAL`、既定40）の1時間あたりの上限を数える。IP は Cloud Run が `X-Forwarded-For` の末尾に足す接続元を使う

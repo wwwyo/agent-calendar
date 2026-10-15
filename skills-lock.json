@@ -1,0 +1,17 @@
+{
+  "skills": {
+    "cloud-run-basics": {
+      "computedHash": "a0446f5d1ce8edcb6413b34b7ee5f9a50941f7813dc12a650b258dd6f5435c50",
+      "skillPath": "skills/cloud/cloud-run-basics/SKILL.md",
+      "source": "google/skills",
+      "sourceType": "github"
+    },
+    "google-agents-cli-adk-code": {
+      "computedHash": "c8c6ce88e986321584d605ab5e7db9330c48943760960f7a8d64bcbd7d5a8929",
+      "skillPath": "skills/google-agents-cli-adk-code/SKILL.md",
+      "source": "google/agents-cli",
+      "sourceType": "github"
+    }
+  },
+  "version": 1
+}

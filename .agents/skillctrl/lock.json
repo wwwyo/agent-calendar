@@ -1,0 +1,38 @@
+{
+  "acceptedHashes": {},
+  "upstreams": {
+    "cloud-run-basics": {
+      "computedHash": "a0446f5d1ce8edcb6413b34b7ee5f9a50941f7813dc12a650b258dd6f5435c50",
+      "installedAt": "2026-10-15T09:01:41.466Z",
+      "native": {
+        "computedHash": "a0446f5d1ce8edcb6413b34b7ee5f9a50941f7813dc12a650b258dd6f5435c50",
+        "skillPath": "skills/cloud/cloud-run-basics/SKILL.md",
+        "source": "google/skills",
+        "sourceType": "github"
+      },
+      "skillFolderHash": "490652ced633152ecd1b0584be93cbc1ef86c8e2",
+      "skillPath": "skills/cloud/cloud-run-basics/SKILL.md",
+      "source": "google/skills",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/google/skills.git",
+      "updatedAt": "2026-10-15T09:01:41.466Z"
+    },
+    "google-agents-cli-adk-code": {
+      "computedHash": "c8c6ce88e986321584d605ab5e7db9330c48943760960f7a8d64bcbd7d5a8929",
+      "installedAt": "2026-10-15T09:01:43.536Z",
+      "native": {
+        "computedHash": "c8c6ce88e986321584d605ab5e7db9330c48943760960f7a8d64bcbd7d5a8929",
+        "skillPath": "skills/google-agents-cli-adk-code/SKILL.md",
+        "source": "google/agents-cli",
+        "sourceType": "github"
+      },
+      "skillFolderHash": "aef7255c22f2c5a4de82ca7c068473c03b2b1ffb",
+      "skillPath": "skills/google-agents-cli-adk-code/SKILL.md",
+      "source": "google/agents-cli",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/google/agents-cli.git",
+      "updatedAt": "2026-10-15T09:01:43.536Z"
+    }
+  },
+  "version": 1
+}

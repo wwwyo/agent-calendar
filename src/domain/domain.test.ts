@@ -96,3 +96,17 @@ describe("propose_event の日時", () => {
     expect(toEventTime("2026-13-40T25:61", "Asia/Tokyo")).toBeUndefined();
   });
 });
+
+describe("Gemini の取り直し", () => {
+  test("429・503 だけを取り直し、上限を超えたら投げる", async () => {
+    const { withRetry } = await import("../agent/agent");
+    let n = 0;
+    expect(await withRetry(async () => (++n < 3 ? Promise.reject(Object.assign(new Error("x"), { status: 429 })) : "ok"), [0, 0])).toBe("ok");
+    n = 0;
+    await expect(withRetry(async () => (++n, Promise.reject(new Error('{"error":{"code":400}}'))), [0, 0])).rejects.toThrow();
+    expect(n).toBe(1);
+    n = 0;
+    await expect(withRetry(async () => (++n, Promise.reject(new Error('{"error":{"code":503}}'))), [0, 0])).rejects.toThrow();
+    expect(n).toBe(3);
+  });
+});

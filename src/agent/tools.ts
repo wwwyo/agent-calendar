@@ -43,6 +43,8 @@ export function toEventTime(s: string, tz: string): EventTime | undefined {
   const local = s.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
   if (local) {
     const [, y, mo, d, h, mi, sec] = local.map(Number) as number[];
+    // Date.UTC は範囲外の値を繰り上げるので、先に弾く
+    if (mo! < 1 || mo! > 12 || d! < 1 || d! > 31 || h! > 23 || mi! > 59 || (sec || 0) > 59) return undefined;
     return { dateTime: iso(fromWall(Date.UTC(y!, mo! - 1, d!, h!, mi!, sec || 0), tz)), timeZone: tz };
   }
   if (!/(Z|[+-]\d{2}:?\d{2})$/.test(s)) return undefined;

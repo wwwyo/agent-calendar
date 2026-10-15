@@ -57,6 +57,9 @@ YAML front matter の payload は廃止した。notes は自然言語のまま�
 - `visibility: public` の組だけを `/w/{ws}` に出す。private の組は runner が動かすだけで表示しない（認証は未実装）
 - public の組では、誰でもフォームから runner の service account に予定を書かせられる。入力は信頼しない: タイトル60文字（改行を潰す）、prompt 500文字、notes 300文字、開始は1分後〜30日後、繰り返しはなし・毎日3回・毎週3回、締切は今日〜1年以内
 - 書き込み系（フォーム・削除・承認・却下）は IP ごと（`DEMO_LIMIT_PER_IP`、既定10）と組全体（`DEMO_LIMIT_GLOBAL`、既定40）の1時間あたりの上限を数える。IP は Cloud Run が `X-Forwarded-For` の末尾に足す接続元を使う
+- 書き込み系の POST は自 origin のページからだけ受ける（`Sec-Fetch-Site: same-origin`、無ければ `Origin` の host と `Host` を比べる。どちらも無ければ 403）。上限は body を読む前に数え、フォームは urlencoded・8KB まで（超えたら 413）
+- 公開の GET（画面と JSON）は IP ごと・1分あたり `READ_LIMIT_PER_IP_PER_MIN`（既定240）まで。Firestore に書かず instance のメモリで数えるので、全体では max-instances 倍まで通る
+- inline script に埋める値は `scriptJson`（`<` `>` `&` と U+2028/2029 を escape）で書く。URL の run・承認・予定の id は形を確かめ、合わなければ 404
 - フォームで足した予定と、承認して足した予定は `DEMO_EVENT_TTL_HOURS`（既定6）後に tick が消す。繰り返しの予定（毎日・毎週3回）は、最後の回の1時間後まで残す（繰り返しの発火を体験できることを優先する）。dashboard からも消せる（デモの印がある予定だけ）
 
 ## 組（workspace）の設定

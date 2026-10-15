@@ -165,6 +165,7 @@ runner の env に `SANDBOX_JOB`（job の名前）と `RUNNER_URL` を足す。
 - cloud で codex・claude を動かすこと。proxy が OpenAI・Anthropic 互換の口を持つ必要があり、今は Vertex AI の `generateContent` だけ
 - worker の設定変更で、blocked の判定を自動で判定し直すか（今は予定を触り直す）
 - dashboard に local worker の生存（`seenAt`）を出す場所と文言
+- sandbox の egress を runner と Google の API だけに絞るか。今の cloud の agent（`gemini`）は proxy を呼ぶだけで任意のコードを動かさないので、外に出られても持ち出せるのは prompt だけ。codex・claude など code を動かす agent を cloud に足すときに入れる。案: Compute Engine と Cloud DNS の API を有効にし、us-central1 に Private Google Access 付きの subnet を作り、job を Direct VPC egress（all-traffic）にする。NAT は置かず、egress の firewall で `199.36.153.8/30`（private.googleapis.com）の 443 以外を拒み、runner の host だけを private DNS zone でその VIP に向ける。費用は DNS zone の月 $0.2 程度。残る穴: VIP 越しに Host を変えれば他の `run.app`・`googleapis.com` にも届く。FQDN で絞るには Secure Web Proxy か Cloud NGFW Enterprise が要る
 
 ## 実装の分担
 

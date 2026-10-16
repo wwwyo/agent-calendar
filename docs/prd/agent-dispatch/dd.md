@@ -30,7 +30,7 @@ tick: 取得 → 判定（変わった起動用の予定だけ）→ 発火予�
   - `dispatch` がない、`dispatch.eventUpdated !== event.updated`、または `dispatch.retryAt` を過ぎた
 - 1 tick・1 組で `JUDGE_PER_TICK`（5）件まで。残りがあれば発火予定の `stale` を残し、次の tick で続ける
 - 予定が変わると `applyChanges` が events の doc を上書きして `dispatch` が消えるので、変わった予定は自然に判定し直しになる。syncToken の失効（410）で全件を取り直すと、全件を判定し直す（まれなので許す）
-- 前の計算（`state/schedule.computedAt`）から `RECOMPUTE_EVERY`（1時間）たった tick でも判定を試みる。`state/schedule` はデプロイをまたいで残るので、この機能より前から保存されている `dispatch` のない起動用の予定は、予定が変わるまで「変わった」tick が来ない。その移行路。判定は `needsJudge` を通る予定だけなので、既に判定済みの予定に LLM は呼ばない
+- 前の計算（`state/schedule.computedAt`）から `RECOMPUTE_EVERY`（1時間）たった tick でも判定を試みる。`state/schedule` はデプロイをまたいで残るので、この機能より前から保存されている `dispatch` のない起動用の予定は、予定が変わるまで「変わった」tick が来ない。その移行路。1時間ごとの再計算が判定にかけるのは `needsJudge` を通る予定だけ（未判定のほか、`eventUpdated` が古い・`retryAt` を過ぎたものも含む）で、判定済みで変わっていない予定に LLM は呼ばない
 - local worker の設定（agent・target の名前）が変わっても判定し直さない。消えた名前は worker が実行時に弾く（下記）
 
 これで calendar-runner の「1分ごとの取得では LLM を呼ばない」を、「変化のない tick では LLM を呼ばない」に緩める。LLM を呼ぶのは、発火（準備）と、起動用の予定が足された・変わったときの判定、それに1時間ごとの再計算でまだ判定のない予定を拾うときだけ。公開の組で判定を増やせるのはデモ用フォームだけで、その数はフォームの上限（IP ごと・組全体）で抑える。

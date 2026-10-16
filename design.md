@@ -133,6 +133,7 @@ body {
 .page-guides {
   position: fixed; inset: 0; z-index: -1; pointer-events: none;
   background: radial-gradient(circle, var(--dot) 0.9px, transparent 0.9px) 0 0 / var(--dot-grid) var(--dot-grid);
+  -webkit-mask: linear-gradient(90deg, #000 calc(50% - var(--max-width) / 2), transparent 0 calc(50% + var(--max-width) / 2), #000 0);
   mask: linear-gradient(90deg, #000 calc(50% - var(--max-width) / 2), transparent 0 calc(50% + var(--max-width) / 2), #000 0);
 }
 
@@ -182,7 +183,7 @@ body {
 .table th { color: var(--muted-foreground); font-weight: 500; font-size: var(--text-xs); text-align: left; }
 .table td, .table th { padding: var(--space-2) var(--space-1); border-bottom: 1px solid var(--border); vertical-align: top; }
 
-/* button は pill。primary は承認など1画面に1種類の主操作だけ */
+/* button は pill。primary は「書き込みが起きる主操作」だけ。1つのまとまりに1つ */
 .btn {
   height: 40px; padding: 0 var(--space-5); border: 1px solid transparent; border-radius: var(--radius-pill);
   font: 500 var(--text-base) var(--font-sans); cursor: pointer;

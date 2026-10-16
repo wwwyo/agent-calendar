@@ -72,7 +72,7 @@ Story の Core action「agent に任せる定期の仕事をカレンダーに�
 
 ## Non-Functional Requirements
 
-- [calendar-runner](../calendar-runner/prd.md) の「1 分ごとの取得では LLM を呼ばない」を緩める。LLM を呼ぶのは、発火したときと、起動用の予定が足された・変わったときの判定だけにする。変化のない tick では呼ばない
+- [calendar-runner](../calendar-runner/prd.md) の「1 分ごとの取得では LLM を呼ばない」を緩める。LLM を呼ぶのは、発火したときと、起動用の予定が足された・変わったときの判定、それに1時間ごとの再計算でまだ判定のない予定を拾うときだけにする。変化のない tick では呼ばない
 - 秘密は repo にも sandbox にも置かない
 
 ## 決めたこと
